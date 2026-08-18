@@ -87,7 +87,7 @@ Funciona no celular, tablet e computador. Pode compartilhar com sua equipe!
 - ✅ **Lista de compras** — lista consolidada, substituições inteligentes e versão simples para o paciente (.docx)
 - ✅ **Folhetos educativos** — material em PDF sobre temas do plano, pronto para imprimir/enviar
 - ✅ Respostas sempre ancoradas no plano já existente — nunca inventa orientação clínica do zero
-- ✅ Gratuito com Gemini 2.5 Flash (~250 perguntas/dia)
+- ✅ Gratuito, rodando sobre o modelo Gemini Flash mais atual (`gemini-3.6-flash` no momento — veja nota abaixo sobre atualização de modelo)
 
 ---
 
@@ -99,14 +99,14 @@ A aba **Consulta técnica** usa o recurso *Grounding with Google Search* da API 
 
 ---
 
-## ⚠️ Limites do plano gratuito do Gemini (2026)
+## ⚠️ Limites do plano gratuito e nome do modelo
 
-| Modelo | Req/min | Req/dia |
-|---|---|---|
-| Gemini 2.5 Flash | 10 | 250 |
-| Gemini 2.5 Pro | 5 | 100 |
+O Google atualiza os modelos Gemini e os limites do plano gratuito com frequência (não publica mais uma tabela fixa e confiável). Duas coisas para ficar de olho:
 
-Para uso clínico individual, o limite gratuito costuma ser suficiente. A busca com fontes (grounding) tem cota e regras próprias, separadas desse limite — veja a seção acima.
+- **Limite de uso**: confira o valor atual direto em [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) — a própria barra lateral do app já traz esse link.
+- **Nome do modelo**: o app usa a constante `GEMINI_MODEL` em `config.py` (hoje `gemini-3.6-flash`). Se um dia o app parar de funcionar com uma mensagem de erro tipo "model ... is no longer available" ou "NOT_FOUND", é sinal de que o Google aposentou esse modelo — a própria mensagem de erro geralmente já diz qual é o novo nome. Basta trocar o valor de `GEMINI_MODEL` nesse arquivo pelo nome indicado e publicar de novo.
+
+A busca com fontes (grounding) tem cota e regras próprias, separadas desse limite — veja a seção acima.
 
 ---
 

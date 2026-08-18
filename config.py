@@ -6,7 +6,7 @@ Prompts de sistema, listas de apoio e parâmetros usados em todo o app.
 # ---------------------------------------------------------------------------
 # Modelo Gemini
 # ---------------------------------------------------------------------------
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.6-flash"
 
 # ---------------------------------------------------------------------------
 # Identidade do assistente
@@ -150,8 +150,10 @@ AJUSTE_OBJETIVO = {
 
 # ---------------------------------------------------------------------------
 # Limites do plano gratuito do Gemini (referência exibida na sidebar)
+#
+# O Google mudou a política e não garante mais números fixos publicados —
+# os limites variam por modelo/projeto e podem mudar sem aviso. Por isso não
+# fixamos números aqui; o app aponta para o AI Studio, onde o limite atual
+# de cada chave/projeto aparece ao vivo.
 # ---------------------------------------------------------------------------
-LIMITES_GEMINI = {
-    "Gemini 2.5 Flash": {"req_min": 10, "req_dia": 250},
-    "Gemini 2.5 Pro": {"req_min": 5, "req_dia": 100},
-}
+LIMITE_GEMINI_URL = "https://aistudio.google.com/app/apikey"

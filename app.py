@@ -14,7 +14,7 @@ import streamlit as st
 from config import (
     NOME_APP,
     DESCRICAO_APP,
-    LIMITES_GEMINI,
+    LIMITE_GEMINI_URL,
     FATORES_ATIVIDADE,
     AJUSTE_OBJETIVO,
     PROMPT_CONSULTA,
@@ -102,17 +102,32 @@ with st.sidebar:
 
     st.divider()
 
-    api_key = st.text_input(
-        "Chave da API do Gemini",
-        type="password",
-        help="Gere gratuitamente em aistudio.google.com/apikey",
-    )
-    st.markdown("[Criar chave gratuita →](https://aistudio.google.com/apikey)")
+    # Se GEMINI_API_KEY estiver configurada em Secrets (Streamlit Cloud) ou em
+    # .streamlit/secrets.toml (local), o app usa essa chave automaticamente e
+    # não pede nada na tela — bom para uso restrito (ex.: só a família/equipe).
+    # Sem essa configuração, cada pessoa cola a própria chave gratuita, o que
+    # é melhor quando o link for compartilhado com mais gente.
+    try:
+        chave_automatica = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        chave_automatica = ""
+
+    if chave_automatica:
+        api_key = chave_automatica
+        st.success("✅ Chave da API configurada para este app.")
+    else:
+        api_key = st.text_input(
+            "Chave da API do Gemini",
+            type="password",
+            help="Gere gratuitamente em aistudio.google.com/apikey",
+        )
+        st.markdown("[Criar chave gratuita →](https://aistudio.google.com/apikey)")
 
     st.divider()
-    st.caption("Limites do plano gratuito (referência):")
-    for modelo, limites in LIMITES_GEMINI.items():
-        st.caption(f"**{modelo}** — {limites['req_min']} req/min · {limites['req_dia']} req/dia")
+    st.caption(
+        f"O limite gratuito de uso muda com frequência — confira o valor atual "
+        f"da sua chave em [AI Studio]({LIMITE_GEMINI_URL})."
+    )
 
     st.divider()
     st.caption(
