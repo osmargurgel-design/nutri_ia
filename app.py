@@ -180,16 +180,30 @@ with tab_consulta:
         "final de cada resposta."
     )
 
-    # Histórico dentro de uma janela com altura fixa: o Streamlit rola essa
-    # área automaticamente para a última mensagem sempre que algo novo é
-    # adicionado, em vez de fazer a página inteira crescer e exigir rolagem manual.
-    janela_chat = st.container(height=480)
-    with janela_chat:
-        for autor, mensagem in st.session_state.historico_consulta:
-            with st.chat_message(autor):
-                st.markdown(mensagem)
+    if st.session_state.historico_consulta:
+        col_limpar, _ = st.columns([1, 4])
+        with col_limpar:
+            if st.button("🗑️ Limpar histórico", key="btn_limpar_chat", use_container_width=True):
+                st.session_state.historico_consulta = []
+                st.rerun()
 
-    pergunta = st.chat_input("Digite sua dúvida técnica...")
+    # Janela com altura máxima: cresce junto com a conversa (poucas mensagens
+    # ficam compactas, sem área vazia) e só passa a rolar internamente depois
+    # de preencher o espaço — sem pesar a página nem perder o scroll automático.
+    qtd_mensagens = len(st.session_state.historico_consulta)
+    if qtd_mensagens == 0:
+        janela_chat = st.container()
+        with janela_chat:
+            st.caption("💬 Sua conversa vai aparecer aqui. Digite sua dúvida abaixo para começar.")
+    else:
+        altura_chat = min(480, max(160, qtd_mensagens * 110))
+        janela_chat = st.container(height=altura_chat)
+        with janela_chat:
+            for autor, mensagem in st.session_state.historico_consulta:
+                with st.chat_message(autor):
+                    st.markdown(mensagem)
+
+    pergunta = st.chat_input("💬 Digite sua dúvida técnica e aperte Enter...")
     if pergunta:
         st.session_state.historico_consulta.append(("user", pergunta))
         with janela_chat:
@@ -204,8 +218,15 @@ with tab_consulta:
                         st.markdown(resposta)
                         st.session_state.historico_consulta.append(("assistant", resposta))
                         st.session_state.contador_ia += 1
+                        sucesso = True
                     except (ValueError, RuntimeError) as erro:
                         st.error(str(erro))
+                        sucesso = False
+        if sucesso:
+            # Rerun só quando deu certo: recalcula a altura da janela do chat
+            # já com a nova mensagem. Em caso de erro, não rerodamos para não
+            # apagar o aviso antes do profissional conseguir lê-lo.
+            st.rerun()
 
 # ---------------------------------------------------------------------------
 # Aba 2 — Calculadora nutricional
@@ -279,8 +300,13 @@ with tab_calc:
             if r["faixa_min"] is not None:
                 linhas_calc.append(f"- Faixa calórica para {r['objetivo'].lower()}: {r['faixa_min']:.0f} – {r['faixa_max']:.0f} kcal/dia")
 
+            titulo_calc = (
+                f"Cálculos nutricionais — {nome_paciente_calc.strip()}"
+                if nome_paciente_calc.strip()
+                else "Cálculos nutricionais"
+            )
             docx_calc = markdown_para_docx(
-                "Cálculos nutricionais",
+                titulo_calc,
                 "\n".join(linhas_calc),
                 assinatura_rodape(
                     "Valores estimados de apoio à decisão clínica — não substituem avaliação "
@@ -309,7 +335,7 @@ with tab_plano:
     with col_a:
         nome_paciente = st.text_input("Nome do paciente", key="plano_paciente")
     with col_b:
-        data_consulta = st.date_input("Data da consulta", key="plano_data")
+        data_consulta = st.date_input("Data da consulta", key="plano_data", format="DD/MM/YYYY")
 
     objetivo_acompanhamento = st.text_area(
         "Objetivo do acompanhamento", height=80, key="plano_objetivo",
@@ -371,7 +397,8 @@ with tab_plano:
             else:
                 with st.spinner("Formatando plano..."):
                     try:
-                        blocos = [f"Nome do paciente: {nome_paciente}", f"Data da consulta: {data_consulta}"]
+                        data_consulta_br = data_consulta.strftime("%d/%m/%Y")
+                        blocos = [f"Nome do paciente: {nome_paciente}", f"Data da consulta: {data_consulta_br}"]
                         for titulo, valor in campos_preenchidos.items():
                             blocos.append(f"\n{titulo}: {valor.strip() if valor.strip() else '(não preenchido)'}")
                         prompt = "\n".join(blocos)
