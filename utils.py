@@ -55,7 +55,13 @@ def get_gemini_response(
             aviso = (
                 "\n\n---\n_⚠️ Busca em fontes na web não disponível com esta chave de API "
                 "(pode exigir faturamento habilitado no Google Cloud). Resposta gerada com "
-                "o conhecimento do modelo, sem consulta em tempo real._"
+                "o conhecimento do modelo, sem consulta em tempo real — vale conferir em "
+                "fontes gratuitas e confiáveis antes de aplicar clinicamente: "
+                "[Guia Alimentar para a População Brasileira](https://bvsms.saude.gov.br/bvs/publicacoes/guia_alimentar_populacao_brasileira_2ed.pdf), "
+                "[Ministério da Saúde](https://www.gov.br/saude), "
+                "[OMS/WHO](https://www.who.int), "
+                "[SciELO](https://www.scielo.org) e "
+                "[PubMed](https://pubmed.ncbi.nlm.nih.gov) — todas de acesso livre._"
             )
             texto = _gerar_sem_busca(client, prompt, system_instruction)
             return texto + aviso

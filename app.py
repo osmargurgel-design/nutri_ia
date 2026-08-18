@@ -14,7 +14,6 @@ import streamlit as st
 from config import (
     NOME_APP,
     DESCRICAO_APP,
-    LIMITE_GEMINI_URL,
     FATORES_ATIVIDADE,
     AJUSTE_OBJETIVO,
     PROMPT_CONSULTA,
@@ -124,9 +123,13 @@ with st.sidebar:
         st.markdown("[Criar chave gratuita →](https://aistudio.google.com/apikey)")
 
     st.divider()
+    if "contador_ia" not in st.session_state:
+        st.session_state.contador_ia = 0
+    st.caption(f"📊 Consultas à IA nesta sessão: **{st.session_state.contador_ia}**")
     st.caption(
-        f"O limite gratuito de uso muda com frequência — confira o valor atual "
-        f"da sua chave em [AI Studio]({LIMITE_GEMINI_URL})."
+        "Esse número conta só o que foi usado desde que essa aba foi aberta — "
+        "não é o limite total da chave (o Google não publica mais esse número de "
+        "forma fixa/confiável)."
     )
 
     st.divider()
@@ -177,25 +180,32 @@ with tab_consulta:
         "final de cada resposta."
     )
 
-    for autor, mensagem in st.session_state.historico_consulta:
-        with st.chat_message(autor):
-            st.markdown(mensagem)
+    # Histórico dentro de uma janela com altura fixa: o Streamlit rola essa
+    # área automaticamente para a última mensagem sempre que algo novo é
+    # adicionado, em vez de fazer a página inteira crescer e exigir rolagem manual.
+    janela_chat = st.container(height=480)
+    with janela_chat:
+        for autor, mensagem in st.session_state.historico_consulta:
+            with st.chat_message(autor):
+                st.markdown(mensagem)
 
     pergunta = st.chat_input("Digite sua dúvida técnica...")
     if pergunta:
         st.session_state.historico_consulta.append(("user", pergunta))
-        with st.chat_message("user"):
-            st.markdown(pergunta)
-        with st.chat_message("assistant"):
-            with st.spinner("Consultando..."):
-                try:
-                    resposta = get_gemini_response(
-                        pergunta, api_key, PROMPT_CONSULTA, buscar_na_web=True
-                    )
-                    st.markdown(resposta)
-                    st.session_state.historico_consulta.append(("assistant", resposta))
-                except (ValueError, RuntimeError) as erro:
-                    st.error(str(erro))
+        with janela_chat:
+            with st.chat_message("user"):
+                st.markdown(pergunta)
+            with st.chat_message("assistant"):
+                with st.spinner("Consultando..."):
+                    try:
+                        resposta = get_gemini_response(
+                            pergunta, api_key, PROMPT_CONSULTA, buscar_na_web=True
+                        )
+                        st.markdown(resposta)
+                        st.session_state.historico_consulta.append(("assistant", resposta))
+                        st.session_state.contador_ia += 1
+                    except (ValueError, RuntimeError) as erro:
+                        st.error(str(erro))
 
 # ---------------------------------------------------------------------------
 # Aba 2 — Calculadora nutricional
@@ -217,21 +227,34 @@ with tab_calc:
         nivel_atividade = st.selectbox("Nível de atividade física", list(FATORES_ATIVIDADE.keys()))
         objetivo = st.selectbox("Objetivo (opcional)", ["—"] + list(AJUSTE_OBJETIVO.keys()))
 
+    nome_paciente_calc = st.text_input("Nome do paciente (opcional, usado só no nome do arquivo)", key="calc_paciente")
+
     if st.button("Calcular", type="primary"):
         imc_resultado = calcular_imc(peso, altura)
         tmb_resultado = calcular_tmb(peso, altura, int(idade), sexo, formula_tmb)
         get_resultado = calcular_get(tmb_resultado, nivel_atividade)
+        faixa_min = faixa_max = None
+        if objetivo != "—":
+            faixa_min, faixa_max = calcular_faixa_calorica(get_resultado, objetivo)
 
+        st.session_state.calc_resultado = {
+            "peso": peso, "altura": altura, "idade": idade, "sexo": sexo,
+            "formula_tmb": formula_tmb, "nivel_atividade": nivel_atividade,
+            "objetivo": objetivo, "imc": imc_resultado, "tmb": tmb_resultado,
+            "get": get_resultado, "faixa_min": faixa_min, "faixa_max": faixa_max,
+        }
+
+    if st.session_state.get("calc_resultado"):
+        r = st.session_state.calc_resultado
         with st.container(border=True):
             st.markdown("**INDICADORES ATUAIS**")
             c1, c2, c3 = st.columns(3)
-            c1.metric("IMC", f"{imc_resultado['imc']}", imc_resultado["classificacao"])
-            c2.metric(f"TMB ({formula_tmb})", f"{tmb_resultado:.0f} kcal/dia")
-            c3.metric("GET (gasto total estimado)", f"{get_resultado:.0f} kcal/dia")
+            c1.metric("IMC", f"{r['imc']['imc']}", r['imc']['classificacao'])
+            c2.metric(f"TMB ({r['formula_tmb']})", f"{r['tmb']:.0f} kcal/dia")
+            c3.metric("GET (gasto total estimado)", f"{r['get']:.0f} kcal/dia")
 
-            if objetivo != "—":
-                faixa_min, faixa_max = calcular_faixa_calorica(get_resultado, objetivo)
-                st.info(f"Faixa calórica estimada para **{objetivo.lower()}**: {faixa_min:.0f} – {faixa_max:.0f} kcal/dia")
+            if r["faixa_min"] is not None:
+                st.info(f"Faixa calórica estimada para **{r['objetivo'].lower()}**: {r['faixa_min']:.0f} – {r['faixa_max']:.0f} kcal/dia")
 
             st.caption(
                 "O IMC não diferencia massa magra de massa gorda nem considera composição "
@@ -240,28 +263,124 @@ with tab_calc:
                 "mais precisos (bioimpedância, calorimetria indireta)."
             )
 
+            linhas_calc = [
+                f"## Dados informados",
+                f"- Peso: {r['peso']} kg",
+                f"- Altura: {r['altura']} cm",
+                f"- Idade: {r['idade']} anos",
+                f"- Sexo biológico: {r['sexo']}",
+                f"- Nível de atividade: {r['nivel_atividade']}",
+                f"",
+                f"## Resultados",
+                f"- IMC: {r['imc']['imc']} ({r['imc']['classificacao']})",
+                f"- TMB ({r['formula_tmb']}): {r['tmb']:.0f} kcal/dia",
+                f"- GET (gasto energético total estimado): {r['get']:.0f} kcal/dia",
+            ]
+            if r["faixa_min"] is not None:
+                linhas_calc.append(f"- Faixa calórica para {r['objetivo'].lower()}: {r['faixa_min']:.0f} – {r['faixa_max']:.0f} kcal/dia")
+
+            docx_calc = markdown_para_docx(
+                "Cálculos nutricionais",
+                "\n".join(linhas_calc),
+                assinatura_rodape(
+                    "Valores estimados de apoio à decisão clínica — não substituem avaliação "
+                    "completa nem métodos mais precisos (bioimpedância, calorimetria indireta)."
+                ),
+            )
+            st.download_button(
+                "⬇️ Baixar cálculos em .docx",
+                data=docx_calc,
+                file_name=nome_arquivo("calculos", nome_paciente_calc or "paciente", "docx"),
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+
 # ---------------------------------------------------------------------------
 # Aba 3 — Planejador nutricional
 # ---------------------------------------------------------------------------
 with tab_plano:
-    st.subheader("Transforme anotações da consulta em um plano formatado")
-    st.caption("Cole as anotações da consulta (soltas ou organizadas) — o Nutri IA formata sem inventar conteúdo clínico.")
+    st.subheader("Monte o plano alimentar do paciente")
+    st.caption(
+        "Preencha os campos que fizer sentido para esta consulta — não precisa preencher "
+        "tudo. O que ficar em branco aparece como \"Não informado\" no documento final, "
+        "sem o Nutri IA inventar nada no lugar."
+    )
 
-    nome_paciente = st.text_input("Nome do paciente", key="plano_paciente")
-    anotacoes = st.text_area("Anotações da consulta", height=220, key="plano_anotacoes")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        nome_paciente = st.text_input("Nome do paciente", key="plano_paciente")
+    with col_b:
+        data_consulta = st.date_input("Data da consulta", key="plano_data")
+
+    objetivo_acompanhamento = st.text_area(
+        "Objetivo do acompanhamento", height=80, key="plano_objetivo",
+        placeholder="Ex.: emagrecimento, ganho de massa magra, controle glicêmico...",
+    )
+    orientacoes_gerais = st.text_area(
+        "Orientações gerais", height=80, key="plano_orientacoes",
+        placeholder="Ex.: fracionar refeições, mastigar devagar, evitar frituras...",
+    )
+
+    st.markdown("**Plano alimentar por refeição** (preencha as que se aplicarem)")
+    col_r1, col_r2 = st.columns(2)
+    with col_r1:
+        cafe_manha = st.text_area("Café da manhã", height=70, key="plano_cafe")
+        almoco = st.text_area("Almoço", height=70, key="plano_almoco")
+        lanches = st.text_area("Lanches", height=70, key="plano_lanches")
+    with col_r2:
+        jantar = st.text_area("Jantar", height=70, key="plano_jantar")
+        ceia = st.text_area("Ceia", height=70, key="plano_ceia")
+
+    col_c, col_d = st.columns(2)
+    with col_c:
+        alimentos_recomendados = st.text_area("Alimentos recomendados", height=80, key="plano_recomendados")
+        hidratacao = st.text_area("Hidratação", height=70, key="plano_hidratacao")
+    with col_d:
+        alimentos_evitar = st.text_area("Alimentos a evitar/restringir", height=80, key="plano_evitar")
+        suplementacao = st.text_area("Suplementação (se houver)", height=70, key="plano_suplementacao")
+
+    observacoes = st.text_area(
+        "Observações e próximos passos", height=80, key="plano_observacoes",
+        placeholder="Ex.: retorno em 30 dias, solicitar exames, reavaliação antropométrica...",
+    )
+    anotacoes_livres = st.text_area(
+        "Anotações adicionais (opcional)", height=100, key="plano_anotacoes_livres",
+        placeholder="Qualquer outra observação da consulta que não se encaixe nos campos acima.",
+    )
 
     if st.button("Gerar plano formatado", type="primary", key="btn_plano"):
-        if not nome_paciente or not anotacoes:
-            st.warning("Preencha o nome do paciente e cole as anotações da consulta.")
+        if not nome_paciente:
+            st.warning("Informe pelo menos o nome do paciente para gerar o documento.")
         else:
-            with st.spinner("Formatando plano..."):
-                try:
-                    prompt = f"Nome do paciente: {nome_paciente}\n\nAnotações da consulta:\n{anotacoes}"
-                    resultado = get_gemini_response(prompt, api_key, PROMPT_PLANEJADOR)
-                    st.session_state.plano_atual = resultado
-                    st.session_state.plano_paciente_nome = nome_paciente
-                except (ValueError, RuntimeError) as erro:
-                    st.error(str(erro))
+            campos_preenchidos = {
+                "Objetivo do acompanhamento": objetivo_acompanhamento,
+                "Orientações gerais": orientacoes_gerais,
+                "Café da manhã": cafe_manha,
+                "Almoço": almoco,
+                "Lanches": lanches,
+                "Jantar": jantar,
+                "Ceia": ceia,
+                "Alimentos recomendados": alimentos_recomendados,
+                "Alimentos a evitar/restringir": alimentos_evitar,
+                "Hidratação": hidratacao,
+                "Suplementação": suplementacao,
+                "Observações e próximos passos": observacoes,
+                "Anotações adicionais": anotacoes_livres,
+            }
+            if not any(v.strip() for v in campos_preenchidos.values()):
+                st.warning("Preencha pelo menos um campo além do nome do paciente.")
+            else:
+                with st.spinner("Formatando plano..."):
+                    try:
+                        blocos = [f"Nome do paciente: {nome_paciente}", f"Data da consulta: {data_consulta}"]
+                        for titulo, valor in campos_preenchidos.items():
+                            blocos.append(f"\n{titulo}: {valor.strip() if valor.strip() else '(não preenchido)'}")
+                        prompt = "\n".join(blocos)
+                        resultado = get_gemini_response(prompt, api_key, PROMPT_PLANEJADOR)
+                        st.session_state.plano_atual = resultado
+                        st.session_state.plano_paciente_nome = nome_paciente
+                        st.session_state.contador_ia += 1
+                    except (ValueError, RuntimeError) as erro:
+                        st.error(str(erro))
 
     if st.session_state.plano_atual:
         with st.container(border=True):
@@ -313,6 +432,7 @@ with tab_lista:
                     resultado = get_gemini_response(plano_texto, api_key, PROMPT_LISTA_COMPRAS)
                     st.session_state.lista_resultado = resultado
                     st.session_state.lista_paciente_nome = nome_paciente_lista
+                    st.session_state.contador_ia += 1
                 except (ValueError, RuntimeError) as erro:
                     st.error(str(erro))
 
@@ -367,6 +487,7 @@ with tab_folheto:
                     resultado = get_gemini_response(prompt, api_key, PROMPT_FOLHETO)
                     st.session_state.folheto_resultado = resultado
                     st.session_state.folheto_tema = tema
+                    st.session_state.contador_ia += 1
                 except (ValueError, RuntimeError) as erro:
                     st.error(str(erro))
 

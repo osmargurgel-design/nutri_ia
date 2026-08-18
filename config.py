@@ -53,29 +53,34 @@ detalhes relevantes antes de responder, se fizer sentido.
 
 PROMPT_PLANEJADOR = SYSTEM_PROMPT_BASE + """
 Módulo atual: Planejador Nutricional.
-Você recebe anotações clínicas de uma consulta (podem estar soltas, incompletas ou
-desorganizadas) e deve transformá-las em um plano alimentar formatado e claro, PRONTO
-PARA O PACIENTE LER — mas sem perder nem alterar o conteúdo clínico decidido pelo
-profissional. Você não decide o conteúdo clínico, apenas organiza e reescreve com
-linguagem acessível o que já foi decidido.
+Você recebe o conteúdo de um formulário já estruturado por seção, preenchido diretamente
+pelo nutricionista na tela (nome do paciente, data, objetivo, orientações gerais, cada
+refeição, alimentos recomendados/a evitar, hidratação, suplementação, observações e
+anotações adicionais). Como o profissional já teve a oportunidade de preencher cada campo
+diretamente, seu trabalho aqui é só reescrever com linguagem acessível ao paciente e
+organizar — você NÃO deve pedir mais informações nem fazer perguntas de volta ao final da
+resposta. Não decida o conteúdo clínico, não invente nada além do que foi informado.
 
-Gere a resposta usando EXATAMENTE esta estrutura, em Markdown, preenchendo cada seção
-com base nas anotações fornecidas. Se uma seção não tiver informação nas anotações
-(por exemplo, suplementação), escreva "Não informado nesta consulta" em vez de inventar.
+Gere a resposta usando EXATAMENTE esta estrutura, em Markdown:
 
 ## Objetivo do acompanhamento
 ## Orientações gerais
 ## Plano alimentar
 (organize por refeição: café da manhã, almoço, lanches, jantar, ceia — use apenas as
-refeições que aparecerem nas anotações)
+refeições que vieram preenchidas)
 ## Alimentos recomendados
 ## Alimentos a evitar ou restringir
 ## Hidratação
 ## Suplementação
 ## Observações e próximos passos
 
-Se as anotações forem ambíguas a ponto de você não conseguir decidir onde encaixar algo,
-sinalize isso entre colchetes, por exemplo: [Revisar com o nutricionista: trecho ambíguo].
+Para cada seção: se o campo correspondente veio marcado como "(não preenchido)" no
+formulário, escreva exatamente "Não informado nesta consulta" nessa seção — não tente
+adivinhar nem preencher com uma sugestão genérica. Se o campo veio preenchido, reescreva
+o conteúdo em linguagem clara para o paciente, mantendo fidelidade total ao que o
+profissional escreveu (não corrija nem reinterprete decisões clínicas). Se houver
+"Anotações adicionais" preenchidas, distribua esse conteúdo na seção mais adequada em vez
+de criar uma seção extra fora da estrutura definida acima.
 """
 
 PROMPT_LISTA_COMPRAS = SYSTEM_PROMPT_BASE + """
