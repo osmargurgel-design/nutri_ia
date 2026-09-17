@@ -1,6 +1,8 @@
+# Tema visual do Nutri IA — paleta "Verde sálvia clínico"
+# (as mesmas cores estão em config.py e no CSS do app.py)
 [theme]
-primaryColor = "#0f3d3e"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f4f6f8"
-textColor = "#12212b"
-font = "sans serif"
+base = "light"
+primaryColor = "#2E8B7A"
+backgroundColor = "#EEF6F3"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1F2D2B"

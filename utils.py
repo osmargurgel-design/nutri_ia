@@ -17,12 +17,22 @@ from config import (
     FAIXAS_IMC,
     FATORES_ATIVIDADE,
     AJUSTE_OBJETIVO,
+    RGB_ESCURA,
+    RGB_PRIMARIA,
+    RGB_FUNDO_SUAVE,
+    RGB_CINZA,
 )
 
 
 # ---------------------------------------------------------------------------
 # Gemini
 # ---------------------------------------------------------------------------
+
+def _eh_erro_de_limite(mensagem: str) -> bool:
+    """True quando a mensagem de erro do Google indica limite de uso atingido."""
+    texto = mensagem.lower()
+    return "429" in texto or "quota" in texto or "resource_exhausted" in texto
+
 
 def get_gemini_response(
     prompt: str,
@@ -39,6 +49,10 @@ def get_gemini_response(
     Cloud, dependendo do tipo de chave), a função tenta de novo sem busca em
     vez de quebrar — e sinaliza isso no texto retornado.
 
+    Se o erro for de LIMITE DE USO (429/quota), não tenta de novo sem busca:
+    mostra direto a mensagem de limite, para não confundir com "busca
+    indisponível".
+
     Levanta uma exceção com mensagem amigável em português caso a chamada falhe
     (chave inválida, limite de uso atingido, etc.) para que a interface possa
     exibir o erro de forma clara ao nutricionista.
@@ -52,6 +66,11 @@ def get_gemini_response(
         try:
             return _gerar_com_busca(client, prompt, system_instruction)
         except Exception as exc:  # noqa: BLE001 - fallback deliberado, sem busca
+            if _eh_erro_de_limite(str(exc)):
+                raise RuntimeError(
+                    "Limite de uso da API do Gemini atingido. Aguarde alguns minutos antes de "
+                    "tentar novamente (o limite do plano gratuito é renovado com o tempo)."
+                ) from exc
             aviso = (
                 "\n\n---\n_⚠️ Busca em fontes na web não disponível com esta chave de API "
                 "(pode exigir faturamento habilitado no Google Cloud). Resposta gerada com "
@@ -119,7 +138,7 @@ def _gerar_sem_busca(client, prompt: str, system_instruction: str) -> str:
         return response.text
     except Exception as exc:  # noqa: BLE001 - queremos capturar qualquer erro da API
         mensagem = str(exc)
-        if "429" in mensagem or "quota" in mensagem.lower():
+        if _eh_erro_de_limite(mensagem):
             raise RuntimeError(
                 "Limite de uso da API do Gemini atingido. Aguarde um pouco antes de tentar "
                 "novamente ou verifique sua cota em aistudio.google.com."
@@ -183,31 +202,82 @@ def calcular_faixa_calorica(get: float, objetivo: str) -> tuple[float, float]:
 # Geração de documentos
 # ---------------------------------------------------------------------------
 
-def markdown_para_docx(titulo: str, conteudo_md: str, rodape: str = "") -> bytes:
-    """Converte um texto em Markdown simples (títulos ##, listas -, texto) em um
-    arquivo .docx formatado, retornando os bytes prontos para download."""
+# Links em Markdown [texto](url) viram "texto (url)" nos documentos
+_RE_LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)]+)\)")
+# Trechos em **negrito** ou *itálico*
+_RE_ENFASE = re.compile(r"(\*\*.+?\*\*|(?<!\*)\*(?!\s)[^*]+?(?<!\s)\*(?!\*))")
+
+
+def _eh_linha_separadora(linha: str) -> bool:
+    return bool(re.fullmatch(r"\s*([-*_])\s*(\1\s*){2,}", linha))
+
+
+def markdown_para_docx(titulo: str, conteudo_md: str, rodape: str = "", cabecalho: str = "") -> bytes:
+    """Converte um texto em Markdown simples (títulos ##, listas -, texto,
+    **negrito**) em um arquivo .docx formatado com a paleta do app, retornando
+    os bytes prontos para download.
+
+    cabecalho: texto opcional (ex.: nome e CRN do nutricionista) exibido no
+    topo de todas as páginas.
+    """
     from docx import Document
-    from docx.shared import Pt
+    from docx.shared import Pt, RGBColor
+
+    cor_escura = RGBColor(*RGB_ESCURA)
+    cor_primaria = RGBColor(*RGB_PRIMARIA)
+    cor_cinza = RGBColor(*RGB_CINZA)
 
     doc = Document()
+
+    # Cores dos estilos de título (Title, Heading 1-3)
+    for nome_estilo, cor in (("Title", cor_escura), ("Heading 1", cor_escura),
+                             ("Heading 2", cor_primaria), ("Heading 3", cor_primaria)):
+        try:
+            doc.styles[nome_estilo].font.color.rgb = cor
+        except KeyError:
+            pass
+
+    if cabecalho:
+        paragrafo_cab = doc.sections[0].header.paragraphs[0]
+        run_cab = paragrafo_cab.add_run(cabecalho)
+        run_cab.font.size = Pt(9)
+        run_cab.font.color.rgb = cor_primaria
+
     doc.add_heading(titulo, level=0)
+
+    def adicionar_texto(paragrafo, texto: str):
+        """Escreve o texto no parágrafo convertendo **negrito** e *itálico*."""
+        texto = _RE_LINK.sub(r"\1 (\2)", texto)
+        for parte in _RE_ENFASE.split(texto):
+            if not parte:
+                continue
+            if parte.startswith("**") and parte.endswith("**") and len(parte) > 4:
+                paragrafo.add_run(parte[2:-2]).bold = True
+            elif parte.startswith("*") and parte.endswith("*") and len(parte) > 2:
+                paragrafo.add_run(parte[1:-1]).italic = True
+            else:
+                paragrafo.add_run(parte)
+        return paragrafo
+
+    def titulo_limpo(texto: str) -> str:
+        return texto.replace("**", "").strip()
 
     for linha in conteudo_md.splitlines():
         linha = linha.rstrip()
-        if not linha:
+        if not linha or _eh_linha_separadora(linha):
             continue
         if linha.startswith("### "):
-            doc.add_heading(linha[4:], level=3)
+            doc.add_heading(titulo_limpo(linha[4:]), level=3)
         elif linha.startswith("## "):
-            doc.add_heading(linha[3:], level=2)
+            doc.add_heading(titulo_limpo(linha[3:]), level=2)
         elif linha.startswith("# "):
-            doc.add_heading(linha[2:], level=1)
-        elif linha.startswith(("- ", "* ")):
-            doc.add_paragraph(linha[2:], style="List Bullet")
-        elif re.match(r"^\d+\.\s", linha):
-            doc.add_paragraph(re.sub(r"^\d+\.\s", "", linha), style="List Number")
+            doc.add_heading(titulo_limpo(linha[2:]), level=1)
+        elif linha.lstrip().startswith(("- ", "* ")):
+            adicionar_texto(doc.add_paragraph(style="List Bullet"), linha.lstrip()[2:])
+        elif re.match(r"^\s*\d+\.\s", linha):
+            adicionar_texto(doc.add_paragraph(style="List Number"), re.sub(r"^\s*\d+\.\s", "", linha))
         else:
-            doc.add_paragraph(linha)
+            adicionar_texto(doc.add_paragraph(), linha)
 
     if rodape:
         doc.add_paragraph()
@@ -215,58 +285,143 @@ def markdown_para_docx(titulo: str, conteudo_md: str, rodape: str = "") -> bytes
         for run in p.runs:
             run.italic = True
             run.font.size = Pt(9)
+            run.font.color.rgb = cor_cinza
 
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
 
 
-def markdown_para_pdf(titulo: str, conteudo_md: str, rodape: str = "") -> bytes:
-    """Converte um texto em Markdown simples em um PDF pronto para impressão."""
+def markdown_para_pdf(titulo: str, conteudo_md: str, rodape: str = "", cabecalho: str = "") -> bytes:
+    """Converte um texto em Markdown simples em um PDF pronto para impressão,
+    com faixa de título na cor do app, subtítulos coloridos, **negrito** real
+    e numeração de páginas.
+
+    cabecalho: texto opcional (ex.: nome e CRN do nutricionista) exibido na
+    faixa do título.
+    """
     from fpdf import FPDF
 
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
+    class PDFNutri(FPDF):
+        def footer(self):
+            self.set_y(-12)
+            self.set_font("Helvetica", "", 8)
+            self.set_text_color(*RGB_CINZA)
+            self.cell(0, 6, f"Página {self.page_no()}", align="C")
 
+    pdf = PDFNutri()
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_page()
+    largura = pdf.epw
+
+    # Faixa de título
+    altura_faixa = 30 if cabecalho else 24
+    pdf.set_fill_color(*RGB_ESCURA)
+    pdf.rect(0, 0, pdf.w, altura_faixa, style="F")
+    pdf.set_xy(pdf.l_margin, 7)
+    pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.multi_cell(0, 10, _limpar_para_pdf(titulo))
-    pdf.ln(2)
+    pdf.cell(largura, 9, _limpar_para_pdf(titulo).replace("**", ""), new_x="LMARGIN", new_y="NEXT")
+    if cabecalho:
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*RGB_FUNDO_SUAVE)
+        pdf.cell(largura, 6, _limpar_para_pdf(cabecalho), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_y(altura_faixa + 8)
+
+    def texto_corrido(texto: str, tamanho: int = 11, recuo: float = 0):
+        pdf.set_font("Helvetica", "", tamanho)
+        pdf.set_text_color(40, 40, 40)
+        pdf.set_x(pdf.l_margin + recuo)
+        pdf.multi_cell(largura - recuo, 6.5, texto, markdown=True, new_x="LMARGIN", new_y="NEXT")
 
     for linha in conteudo_md.splitlines():
         linha = linha.rstrip()
         if not linha:
             pdf.ln(2)
             continue
+        if _eh_linha_separadora(linha):
+            pdf.ln(1)
+            pdf.set_draw_color(*RGB_FUNDO_SUAVE)
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + largura, pdf.get_y())
+            pdf.ln(3)
+            continue
+
         texto = _limpar_para_pdf(linha)
         pdf.set_x(pdf.l_margin)
-        if linha.startswith("## "):
-            pdf.set_font("Helvetica", "B", 13)
-            pdf.multi_cell(0, 8, texto[3:])
-        elif linha.startswith("# "):
-            pdf.set_font("Helvetica", "B", 14)
-            pdf.multi_cell(0, 8, texto[2:])
-        elif linha.startswith(("- ", "* ")):
-            pdf.set_font("Helvetica", "", 11)
-            pdf.multi_cell(0, 7, f"-  {texto[2:]}")
+
+        if texto.startswith("## ") or texto.startswith("### "):
+            nivel = 3 if texto.startswith("### ") else 2
+            pdf.ln(3)
+            pdf.set_font("Helvetica", "B", 13 if nivel == 2 else 11.5)
+            pdf.set_text_color(*RGB_PRIMARIA)
+            pdf.multi_cell(largura, 8, texto[nivel + 1:].replace("**", ""), new_x="LMARGIN", new_y="NEXT")
+            if nivel == 2:
+                pdf.set_draw_color(*RGB_FUNDO_SUAVE)
+                pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + largura, pdf.get_y())
+                pdf.ln(2)
+        elif texto.startswith("# "):
+            pdf.ln(2)
+            pdf.set_font("Helvetica", "B", 15)
+            pdf.set_text_color(*RGB_ESCURA)
+            pdf.multi_cell(largura, 9, texto[2:].replace("**", ""), new_x="LMARGIN", new_y="NEXT")
+        elif texto.lstrip().startswith(("- ", "* ")):
+            recuo_lista = 7 if texto.startswith((" ", "\t")) else 0
+            y = pdf.get_y()
+            pdf.set_fill_color(*RGB_PRIMARIA)
+            pdf.ellipse(pdf.l_margin + recuo_lista + 1.2, y + 2.4, 1.8, 1.8, style="F")
+            texto_corrido(texto.lstrip()[2:], recuo=recuo_lista + 5)
         else:
-            pdf.set_font("Helvetica", "", 11)
-            pdf.multi_cell(0, 7, texto)
+            texto_corrido(texto)
 
     if rodape:
-        pdf.ln(4)
+        pdf.ln(5)
         pdf.set_x(pdf.l_margin)
         pdf.set_font("Helvetica", "I", 8)
-        pdf.multi_cell(0, 5, _limpar_para_pdf(rodape))
+        pdf.set_text_color(*RGB_CINZA)
+        pdf.multi_cell(largura, 5, _limpar_para_pdf(rodape), new_x="LMARGIN", new_y="NEXT")
 
-    saida = pdf.output(dest="S")
-    return bytes(saida)
+    return bytes(pdf.output())
+
+
+# Caracteres comuns em textos gerados pela IA que a fonte do PDF (Helvetica,
+# só latin-1) não tem — trocados por equivalentes que ela tem.
+_TROCAS_PDF = {
+    "—": "-",    # — travessão
+    "–": "-",    # – meia-risca
+    "‒": "-",
+    "−": "-",    # sinal de menos
+    "“": '"', "”": '"', "„": '"',
+    "‘": "'", "’": "'",
+    "…": "...",  # reticências
+    "•": "-",    # • marcador
+    "→": "->",   # seta
+    "≤": "<=", "≥": ">=",
+    " ": " ",
+    " ": " ", "​": "",
+}
 
 
 def _limpar_para_pdf(texto: str) -> str:
-    """fpdf2 com fontes core (Helvetica) só suporta latin-1; troca emojis/caracteres
-    fora desse conjunto por uma aproximação segura para não quebrar a geração."""
-    return texto.encode("latin-1", errors="replace").decode("latin-1")
+    """Prepara o texto para a fonte Helvetica do fpdf2 (só latin-1):
+    - troca travessão, aspas curvas, reticências etc. por equivalentes;
+    - converte links [texto](url) em "texto (url)";
+    - converte *itálico* simples em texto normal (o negrito **x** é mantido,
+      o fpdf2 desenha como negrito de verdade);
+    - remove emojis e outros símbolos que a fonte não tem (antes viravam "?").
+    Acentos do português (á, ç, õ...) são mantidos normalmente.
+    """
+    for original, troca in _TROCAS_PDF.items():
+        texto = texto.replace(original, troca)
+    texto = _RE_LINK.sub(r"\1 (\2)", texto)
+    # "--" e "__" têm significado especial no modo markdown do fpdf2
+    # (sublinhado/itálico); evita formatações acidentais.
+    texto = re.sub(r"-{2,}", "-", texto)
+    texto = texto.replace("__", "_")
+    texto = re.sub(r"(?<!\*)\*(?!\s|\*)([^*]+?)(?<!\s)\*(?!\*)", r"\1", texto)
+    texto = texto.encode("latin-1", errors="ignore").decode("latin-1")
+    # Emoji removido no começo da linha pode deixar espaço sobrando
+    texto = re.sub(r"^(\s*(?:[-*]|#{1,3}|\d+\.)\s)\s+", r"\1", texto)
+    return texto
 
 
 def nome_arquivo(prefixo: str, paciente: str, extensao: str) -> str:

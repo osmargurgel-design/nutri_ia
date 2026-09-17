@@ -20,6 +20,12 @@ from config import (
     PROMPT_PLANEJADOR,
     PROMPT_LISTA_COMPRAS,
     PROMPT_FOLHETO,
+    COR_ESCURA,
+    COR_PRIMARIA,
+    COR_FUNDO,
+    COR_FUNDO_SUAVE,
+    COR_BORDA,
+    COR_TEXTO,
 )
 from utils import (
     get_gemini_response,
@@ -35,32 +41,53 @@ from utils import (
 st.set_page_config(page_title=NOME_APP, page_icon="🩺", layout="wide")
 
 # ---------------------------------------------------------------------------
-# Visual — painel clínico verde-petróleo
+# Visual — paleta "Verde sálvia clínico"
+# Fundo menta bem claro, cartões brancos, barra lateral verde-petróleo.
+# As cores ficam em config.py; o .streamlit/config.toml repete as principais.
 # ---------------------------------------------------------------------------
 st.markdown(
-    """
+    f"""
     <style>
-    section[data-testid="stSidebar"] {
-        background-color: #0f3d3e;
-    }
-    section[data-testid="stSidebar"] * {
+    /* Fundo geral da página */
+    .stApp, [data-testid="stAppViewContainer"] {{
+        background-color: {COR_FUNDO};
+        color: {COR_TEXTO};
+    }}
+    [data-testid="stHeader"] {{
+        background-color: transparent;
+    }}
+
+    /* Barra lateral */
+    section[data-testid="stSidebar"] {{
+        background-color: {COR_ESCURA};
+    }}
+    section[data-testid="stSidebar"] * {{
         color: #eaf4f2 !important;
-    }
-    section[data-testid="stSidebar"] input, section[data-testid="stSidebar"] textarea {
+    }}
+    section[data-testid="stSidebar"] input, section[data-testid="stSidebar"] textarea {{
         background-color: #134a4b !important;
         color: #ffffff !important;
         border: 1px solid #1e5a5b !important;
-    }
-    section[data-testid="stSidebar"] a {
-        color: #9fd8cf !important;
-    }
-    section[data-testid="stSidebar"] hr {
+    }}
+    section[data-testid="stSidebar"] div[data-baseweb="input"],
+    section[data-testid="stSidebar"] div[data-baseweb="base-input"] {{
+        background-color: #134a4b !important;
         border-color: #1e5a5b !important;
-    }
-    div[data-testid="stSidebarUserContent"] .stCaption, section[data-testid="stSidebar"] .stCaption {
+    }}
+    section[data-testid="stSidebar"] div[data-baseweb="input"] button,
+    section[data-testid="stSidebar"] div[data-baseweb="input"] > div {{
+        background-color: #134a4b !important;
+    }}
+    section[data-testid="stSidebar"] a {{
+        color: #9fd8cf !important;
+    }}
+    section[data-testid="stSidebar"] hr {{
+        border-color: #1e5a5b !important;
+    }}
+    div[data-testid="stSidebarUserContent"] .stCaption, section[data-testid="stSidebar"] .stCaption {{
         color: #a9c9c4 !important;
-    }
-    .crn-badge {
+    }}
+    .crn-badge {{
         background-color: #134a4b;
         border-radius: 6px;
         padding: 10px 12px;
@@ -68,20 +95,80 @@ st.markdown(
         color: #bcdad5;
         margin-top: 10px;
         line-height: 1.5;
-    }
-    button[data-baseweb="tab"] {
+    }}
+
+    /* Abas */
+    div[data-baseweb="tab-list"] {{
+        gap: 4px;
+    }}
+    button[data-baseweb="tab"] {{
         font-weight: 500;
-    }
-    button[data-baseweb="tab"][aria-selected="true"] {
-        color: #0f3d3e !important;
-    }
-    div[data-baseweb="tab-highlight"] {
-        background-color: #0f3d3e !important;
-    }
+    }}
+    button[data-baseweb="tab"][aria-selected="true"] {{
+        color: {COR_ESCURA} !important;
+    }}
+    div[data-baseweb="tab-highlight"] {{
+        background-color: {COR_PRIMARIA} !important;
+    }}
+    div[data-baseweb="tab-border"] {{
+        background-color: {COR_BORDA} !important;
+    }}
+
+    /* Títulos das abas */
+    [data-testid="stMain"] h3 {{
+        color: {COR_ESCURA};
+    }}
+
+    /* Cartões (containers com borda) em branco, destacados do fundo */
+    [data-testid="stMain"] div[data-testid="stVerticalBlockBorderWrapper"] {{
+        background-color: #ffffff;
+        border-color: {COR_BORDA} !important;
+        border-radius: 10px;
+    }}
+
+    /* Campos de digitação brancos com borda suave */
+    [data-testid="stMain"] div[data-baseweb="input"],
+    [data-testid="stMain"] div[data-baseweb="base-input"],
+    [data-testid="stMain"] div[data-baseweb="textarea"],
+    [data-testid="stMain"] div[data-baseweb="select"] > div {{
+        background-color: #ffffff !important;
+        border-color: {COR_BORDA} !important;
+    }}
+    [data-testid="stMain"] input, [data-testid="stMain"] textarea {{
+        background-color: #ffffff !important;
+    }}
+
+    /* Campo de mensagem do chat */
+    [data-testid="stChatInput"], [data-testid="stChatInput"] > div {{
+        background-color: #ffffff !important;
+        border-color: {COR_PRIMARIA} !important;
+    }}
+    [data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] {{
+        background-color: {COR_FUNDO} !important;
+    }}
+
+    /* Caixas de indicadores (métricas) */
+    [data-testid="stMetric"] {{
+        background-color: {COR_FUNDO_SUAVE};
+        border-radius: 8px;
+        padding: 10px 14px;
+    }}
+    [data-testid="stMetricValue"] {{
+        color: {COR_ESCURA};
+    }}
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+
+def _ler_secret(nome: str) -> str:
+    """Lê um valor dos Secrets do Streamlit Cloud; devolve vazio se não existir."""
+    try:
+        return str(st.secrets.get(nome, ""))
+    except Exception:
+        return ""
+
 
 # ---------------------------------------------------------------------------
 # Barra lateral — identidade profissional, chave da API e contexto
@@ -89,6 +176,14 @@ st.markdown(
 with st.sidebar:
     st.markdown(f"### 🩺 {NOME_APP}")
     st.caption("Painel clínico do profissional")
+
+    # Nome e CRN já vêm preenchidos se estiverem configurados nos Secrets do
+    # Streamlit Cloud (NOME_NUTRICIONISTA e CRN_NUTRICIONISTA). Continuam
+    # editáveis na tela.
+    if "nome_nutricionista" not in st.session_state:
+        st.session_state.nome_nutricionista = _ler_secret("NOME_NUTRICIONISTA")
+    if "crn_nutricionista" not in st.session_state:
+        st.session_state.crn_nutricionista = _ler_secret("CRN_NUTRICIONISTA")
 
     nome_nutricionista = st.text_input("Nome do nutricionista", key="nome_nutricionista", placeholder="Dra. Ana Souza")
     crn_nutricionista = st.text_input("CRN", key="crn_nutricionista", placeholder="12345-SP")
@@ -106,10 +201,7 @@ with st.sidebar:
     # não pede nada na tela — bom para uso restrito (ex.: só a família/equipe).
     # Sem essa configuração, cada pessoa cola a própria chave gratuita, o que
     # é melhor quando o link for compartilhado com mais gente.
-    try:
-        chave_automatica = st.secrets.get("GEMINI_API_KEY", "")
-    except Exception:
-        chave_automatica = ""
+    chave_automatica = _ler_secret("GEMINI_API_KEY")
 
     if chave_automatica:
         api_key = chave_automatica
@@ -149,6 +241,15 @@ def assinatura_rodape(texto_base: str = "") -> str:
         assinatura = " — ".join(p for p in [nome, f"CRN {crn}" if crn else ""] if p)
         partes.append(assinatura)
     return "\n".join(partes)
+
+
+def cabecalho_profissional() -> str:
+    """Texto do cabeçalho dos documentos: nome e CRN do nutricionista (se informados)."""
+    nome = st.session_state.get("nome_nutricionista", "").strip()
+    crn = st.session_state.get("crn_nutricionista", "").strip()
+    partes = [p for p in [nome, f"CRN {crn}" if crn else ""] if p]
+    return "  |  ".join(partes)
+
 
 if "historico_consulta" not in st.session_state:
     st.session_state.historico_consulta = []
@@ -248,7 +349,10 @@ with tab_calc:
         nivel_atividade = st.selectbox("Nível de atividade física", list(FATORES_ATIVIDADE.keys()))
         objetivo = st.selectbox("Objetivo (opcional)", ["—"] + list(AJUSTE_OBJETIVO.keys()))
 
-    nome_paciente_calc = st.text_input("Nome do paciente (opcional, usado só no nome do arquivo)", key="calc_paciente")
+    nome_paciente_calc = st.text_input(
+        "Nome do paciente (opcional — aparece no título do documento e no nome do arquivo)",
+        key="calc_paciente",
+    )
 
     if st.button("Calcular", type="primary"):
         imc_resultado = calcular_imc(peso, altura)
@@ -312,6 +416,7 @@ with tab_calc:
                     "Valores estimados de apoio à decisão clínica — não substituem avaliação "
                     "completa nem métodos mais precisos (bioimpedância, calorimetria indireta)."
                 ),
+                cabecalho=cabecalho_profissional(),
             )
             st.download_button(
                 "⬇️ Baixar cálculos em .docx",
@@ -420,6 +525,7 @@ with tab_plano:
                 f"Plano alimentar — {st.session_state.get('plano_paciente_nome', 'Paciente')}",
                 st.session_state.plano_atual,
                 rodape,
+                cabecalho=cabecalho_profissional(),
             )
             st.download_button(
                 "⬇️ Baixar plano em .docx",
@@ -470,6 +576,7 @@ with tab_lista:
                 f"Lista de compras — {st.session_state.get('lista_paciente_nome', 'Paciente')}",
                 st.session_state.lista_resultado,
                 assinatura_rodape("Material de apoio ao dia a dia — não substitui o plano alimentar original."),
+                cabecalho=cabecalho_profissional(),
             )
             st.download_button(
                 "⬇️ Baixar lista em .docx",
@@ -526,6 +633,7 @@ with tab_folheto:
                 f"Folheto — {st.session_state.get('folheto_tema', 'Orientação nutricional')}",
                 st.session_state.folheto_resultado,
                 rodape,
+                cabecalho=cabecalho_profissional(),
             )
             st.download_button(
                 "⬇️ Baixar folheto em .pdf",

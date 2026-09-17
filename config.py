@@ -14,6 +14,25 @@ GEMINI_MODEL = "gemini-3.6-flash"
 NOME_APP = "Nutri IA"
 DESCRICAO_APP = "Assistente de apoio ao dia a dia do profissional nutricionista"
 
+# ---------------------------------------------------------------------------
+# Paleta visual — "Verde sálvia clínico" (escolhida em 17/09/2026)
+# Usada no CSS do app e nos documentos .docx/.pdf gerados.
+# O arquivo .streamlit/config.toml repete as cores principais do tema.
+# ---------------------------------------------------------------------------
+COR_ESCURA = "#0F3D3E"        # barra lateral, títulos principais
+COR_PRIMARIA = "#2E8B7A"      # botões, abas selecionadas, subtítulos
+COR_FUNDO = "#EEF6F3"         # fundo geral da página (menta bem claro)
+COR_FUNDO_SUAVE = "#DDEFE9"   # destaques leves
+COR_BORDA = "#CFE3DC"         # bordas de cartões e campos
+COR_TEXTO = "#1F2D2B"         # texto principal
+COR_DESTAQUE = "#F2A65A"      # detalhe quente (uso pontual)
+
+# Valores RGB das cores usadas nos documentos (python-docx e fpdf2 pedem RGB)
+RGB_ESCURA = (15, 61, 62)
+RGB_PRIMARIA = (46, 139, 122)
+RGB_FUNDO_SUAVE = (221, 239, 233)
+RGB_CINZA = (95, 110, 107)
+
 SYSTEM_PROMPT_BASE = """
 Você é o Nutri IA, um assistente de apoio técnico para nutricionistas brasileiros.
 Você conversa com o PROFISSIONAL, não com o paciente — pode e deve usar terminologia
