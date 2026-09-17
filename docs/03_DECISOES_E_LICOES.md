@@ -74,6 +74,12 @@ provedor de IA, ferramenta de deploy, etc.
   automaticamente para resposta sem busca + aviso com links de fontes confiáveis
   (não trava o app). Isso vale inclusive quando o erro é de cota da busca
   (429) — ver a lição logo abaixo.
+- **Nunca devolver `response.text` sem checar se veio vazio.** O Gemini pode
+  responder com texto vazio (pergunta fora do que ele sabe responder, filtro de
+  segurança, resposta cortada) sem lançar erro nenhum — se o app repassa esse
+  texto vazio direto pra tela, parece que o app quebrou. Sempre checar se veio
+  algo e, se não veio, explicar o motivo (via `finish_reason`) em vez de deixar
+  a tela em branco ou só com o rodapé/aviso.
 - **Cota da busca esgotada = duas chamadas por pergunta = app lento.** Lição de
   17/09/2026: quando o fallback existe, ele precisa de memória — depois da
   primeira falha, não insistir na busca na mesma sessão. E erro 503

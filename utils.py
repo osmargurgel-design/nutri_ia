@@ -46,6 +46,47 @@ MENSAGEM_CONGESTIONADO = (
     "daqui a pouco."
 )
 
+# Quando o Gemini interrompe a resposta por segurança, cada valor de
+# finish_reason vira uma explicação em português para o profissional.
+_MOTIVOS_RESPOSTA_VAZIA = {
+    "SAFETY": "o conteúdo foi identificado pelos filtros de segurança do Google.",
+    "RECITATION": "a resposta se pareceria demais com um texto protegido/existente.",
+    "PROHIBITED_CONTENT": "o tema foi identificado como não permitido pelos filtros do Google.",
+    "BLOCKLIST": "a pergunta contém um termo bloqueado pelos filtros do Google.",
+    "SPII": "a pergunta pareceu conter dado pessoal sensível.",
+    "MAX_TOKENS": "a resposta ficou longa demais e foi cortada antes de terminar.",
+}
+
+
+def _texto_da_resposta(response) -> str:
+    """Extrai o texto de uma resposta do Gemini, com uma explicação clara em
+    português quando ele não gerar nenhum texto (em vez de devolver uma
+    resposta vazia sem dizer o motivo)."""
+    texto = (response.text or "").strip()
+    if texto:
+        return texto
+
+    motivo = None
+    try:
+        finish_reason = str(response.candidates[0].finish_reason)
+    except (AttributeError, IndexError):
+        finish_reason = ""
+    for chave, explicacao in _MOTIVOS_RESPOSTA_VAZIA.items():
+        if chave in finish_reason:
+            motivo = explicacao
+            break
+
+    if motivo:
+        raise RuntimeError(
+            f"O Gemini não conseguiu responder esta pergunta: {motivo} Tente reformular a "
+            "pergunta ou, se for sobre um paciente, descreva o caso sem dados que o "
+            "identifiquem."
+        )
+    raise RuntimeError(
+        "O Gemini não devolveu uma resposta desta vez (não é limite de uso nem erro de "
+        "conexão). Tente reformular a pergunta de forma mais direta ou envie de novo."
+    )
+
 
 def get_gemini_response(
     prompt: str,
@@ -132,7 +173,7 @@ def _gerar_com_busca(client, prompt: str, system_instruction: str) -> str:
             tools=[grounding_tool],
         ),
     )
-    texto = response.text
+    texto = _texto_da_resposta(response)
 
     try:
         metadata = response.candidates[0].grounding_metadata
@@ -167,7 +208,8 @@ def _gerar_sem_busca(client, prompt: str, system_instruction: str) -> str:
                 system_instruction=system_instruction,
             ),
         )
-        return response.text
+    except RuntimeError:
+        raise
     except Exception as exc:  # noqa: BLE001 - queremos capturar qualquer erro da API
         mensagem = str(exc)
         if _eh_erro_de_congestionamento(mensagem):
@@ -182,6 +224,8 @@ def _gerar_sem_busca(client, prompt: str, system_instruction: str) -> str:
                 "Chave da API inválida. Confira a chave colada na barra lateral."
             ) from exc
         raise RuntimeError(f"Erro ao consultar o Gemini: {mensagem}") from exc
+
+    return _texto_da_resposta(response)
 
 
 # ---------------------------------------------------------------------------

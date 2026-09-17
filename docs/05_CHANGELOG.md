@@ -5,6 +5,21 @@ e para você acompanharem o que já foi feito sem precisar reler a conversa toda
 
 ---
 
+## Rodada 8d — 2026-09-17 — Corrige resposta "vazia" na Consulta técnica
+
+- Encontrado o motivo do "não funciona nem uma pergunta simples": em algumas
+  perguntas (ex.: pedir um número que a IA não tem como saber, ou um tema que
+  os filtros de segurança do Google barram) o Gemini devolve uma resposta sem
+  nenhum texto. Antes, o app mostrava essa resposta vazia como se fosse normal
+  — na tela aparecia só a linha do aviso "sem busca na web", sem nenhuma
+  resposta de verdade, parecendo que o app tinha quebrado.
+- Agora, quando isso acontece, o app mostra um erro claro explicando que a IA
+  não conseguiu gerar uma resposta desta vez (e, quando for por causa dos
+  filtros de segurança do Google, avisa isso especificamente) — em vez de
+  fingir que respondeu.
+- Esse problema já existia antes desta rodada; só ficou visível agora porque a
+  Rodada 8c passou a anexar o aviso curto a toda resposta, inclusive às vazias.
+
 ## Rodada 8c — 2026-09-17 — Consulta técnica mais rápida e avisos melhores
 
 Contexto: a cota da busca na web (grounding) estava esgotada na chave, então
