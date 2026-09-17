@@ -5,6 +5,19 @@ e para você acompanharem o que já foi feito sem precisar reler a conversa toda
 
 ---
 
+## Rodada 8b — 2026-09-17 — Correção do aviso de limite (mesmo dia)
+
+- A rodada 8 tinha passado a mostrar "Limite de uso atingido" e PARAR quando a
+  chamada com busca na web falhava por cota (429). Isso foi um erro: a busca na
+  web (grounding) tem cota própria, que acaba bem antes da cota geral do modelo
+  — e o app deixava de responder em situações em que a versão anterior
+  respondia normalmente sem busca.
+- Agora, quando a busca bate no limite, o app tenta de novo SEM busca e entrega
+  a resposta com um aviso claro ("cota da busca na web esgotada por enquanto").
+  A mensagem de limite só aparece se a chamada sem busca também for recusada.
+- Nada no app consome cota sozinho: a IA só é chamada quando alguém clica em um
+  botão ou envia uma pergunta.
+
 ## Rodada 8 — 2026-09-17 — Paleta "Verde sálvia clínico" + documentos + correções
 
 - **Visual do app:** fundo da página trocado do branco puro para menta bem claro

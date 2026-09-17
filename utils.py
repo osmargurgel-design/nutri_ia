@@ -67,15 +67,23 @@ def get_gemini_response(
             return _gerar_com_busca(client, prompt, system_instruction)
         except Exception as exc:  # noqa: BLE001 - fallback deliberado, sem busca
             if _eh_erro_de_limite(str(exc)):
-                raise RuntimeError(
-                    "Limite de uso da API do Gemini atingido. Aguarde alguns minutos antes de "
-                    "tentar novamente (o limite do plano gratuito é renovado com o tempo)."
-                ) from exc
+                # A busca na web (grounding) tem cota própria, que costuma
+                # acabar antes da cota normal do modelo. Nesse caso ainda vale
+                # tentar responder sem busca — só se ESSA chamada também bater
+                # no limite é que o profissional vê a mensagem de limite.
+                motivo = (
+                    "_⚠️ Cota da busca na web esgotada por enquanto (ela tem um limite "
+                    "próprio, separado do limite geral, e é renovada com o tempo). Resposta "
+                )
+            else:
+                motivo = (
+                    "_⚠️ Busca em fontes na web não disponível com esta chave de API "
+                    "(pode exigir faturamento habilitado no Google Cloud). Resposta "
+                )
             aviso = (
-                "\n\n---\n_⚠️ Busca em fontes na web não disponível com esta chave de API "
-                "(pode exigir faturamento habilitado no Google Cloud). Resposta gerada com "
-                "o conhecimento do modelo, sem consulta em tempo real — vale conferir em "
-                "fontes gratuitas e confiáveis antes de aplicar clinicamente: "
+                "\n\n---\n" + motivo +
+                "gerada com o conhecimento do modelo, sem consulta em tempo real — "
+                "vale conferir em fontes gratuitas e confiáveis antes de aplicar clinicamente: "
                 "[Guia Alimentar para a População Brasileira](https://bvsms.saude.gov.br/bvs/publicacoes/guia_alimentar_populacao_brasileira_2ed.pdf), "
                 "[Ministério da Saúde](https://www.gov.br/saude), "
                 "[OMS/WHO](https://www.who.int), "

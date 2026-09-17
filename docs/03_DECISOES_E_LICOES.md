@@ -72,8 +72,13 @@ provedor de IA, ferramenta de deploy, etc.
   toda chave gratuita** — pode depender de faturamento habilitado no Google
   Cloud. Por isso o app sempre tenta com busca primeiro e, se falhar, cai
   automaticamente para resposta sem busca + aviso com links de fontes confiáveis
-  (não trava o app). Exceção: se o erro for de limite de uso (429/quota), o app
-  mostra a mensagem de limite direto, sem tentar de novo.
+  (não trava o app). Isso vale inclusive quando o erro é de cota da busca
+  (429) — ver a lição logo abaixo.
+- **Nunca transformar o fallback da busca em erro fatal.** Na rodada 8 o erro
+  de cota (429) na chamada com grounding passou a virar mensagem de limite,
+  sem tentar responder sem busca — e o app parou de responder em casos que
+  antes funcionavam. Regra: cota da busca esgotada = responder sem busca com
+  aviso; só mostrar "limite atingido" se a chamada sem busca também falhar.
 - **`pkill -f "streamlit run"` matando o processo errado**: detalhe só relevante
   para quem está testando o app no ambiente de desenvolvimento — evitar matar
   processos com `pkill` encadeado no mesmo comando que sobe um novo servidor;
