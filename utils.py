@@ -34,11 +34,25 @@ def _eh_erro_de_limite(mensagem: str) -> bool:
     return "429" in texto or "quota" in texto or "resource_exhausted" in texto
 
 
+def _eh_erro_de_congestionamento(mensagem: str) -> bool:
+    """True quando o modelo está sobrecarregado no Google (erro 503)."""
+    texto = mensagem.lower()
+    return "503" in texto or "unavailable" in texto or "overloaded" in texto
+
+
+MENSAGEM_CONGESTIONADO = (
+    "O modelo de IA do Google está congestionado neste momento (muita gente usando ao "
+    "mesmo tempo). Isso costuma durar poucos minutos — tente enviar a pergunta de novo "
+    "daqui a pouco."
+)
+
+
 def get_gemini_response(
     prompt: str,
     api_key: str,
     system_instruction: str,
     buscar_na_web: bool = False,
+    ao_falhar_busca=None,
 ) -> str:
     """Envia um prompt ao Gemini com a instrução de sistema do módulo atual.
 
@@ -49,9 +63,13 @@ def get_gemini_response(
     Cloud, dependendo do tipo de chave), a função tenta de novo sem busca em
     vez de quebrar — e sinaliza isso no texto retornado.
 
-    Se o erro for de LIMITE DE USO (429/quota), não tenta de novo sem busca:
-    mostra direto a mensagem de limite, para não confundir com "busca
-    indisponível".
+    Exceção: se o modelo estiver congestionado no Google (erro 503), não
+    adianta tentar de novo na hora — a função avisa direto, sem dobrar a
+    espera do profissional.
+
+    `ao_falhar_busca` é uma função opcional chamada quando a busca não
+    funcionou. A tela usa isso para não insistir na busca nas próximas
+    perguntas da mesma sessão (o que deixaria cada resposta mais lenta à toa).
 
     Levanta uma exceção com mensagem amigável em português caso a chamada falhe
     (chave inválida, limite de uso atingido, etc.) para que a interface possa
@@ -66,6 +84,12 @@ def get_gemini_response(
         try:
             return _gerar_com_busca(client, prompt, system_instruction)
         except Exception as exc:  # noqa: BLE001 - fallback deliberado, sem busca
+            if _eh_erro_de_congestionamento(str(exc)):
+                # Modelo sobrecarregado: tentar de novo agora só faria o
+                # profissional esperar o dobro para receber o mesmo erro.
+                raise RuntimeError(MENSAGEM_CONGESTIONADO) from exc
+            if callable(ao_falhar_busca):
+                ao_falhar_busca()
             if _eh_erro_de_limite(str(exc)):
                 # A busca na web (grounding) tem cota própria, que costuma
                 # acabar antes da cota normal do modelo. Nesse caso ainda vale
@@ -146,6 +170,8 @@ def _gerar_sem_busca(client, prompt: str, system_instruction: str) -> str:
         return response.text
     except Exception as exc:  # noqa: BLE001 - queremos capturar qualquer erro da API
         mensagem = str(exc)
+        if _eh_erro_de_congestionamento(mensagem):
+            raise RuntimeError(MENSAGEM_CONGESTIONADO) from exc
         if _eh_erro_de_limite(mensagem):
             raise RuntimeError(
                 "Limite de uso da API do Gemini atingido. Aguarde um pouco antes de tentar "

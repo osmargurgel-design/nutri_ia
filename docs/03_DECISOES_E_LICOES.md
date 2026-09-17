@@ -74,6 +74,10 @@ provedor de IA, ferramenta de deploy, etc.
   automaticamente para resposta sem busca + aviso com links de fontes confiáveis
   (não trava o app). Isso vale inclusive quando o erro é de cota da busca
   (429) — ver a lição logo abaixo.
+- **Cota da busca esgotada = duas chamadas por pergunta = app lento.** Lição de
+  17/09/2026: quando o fallback existe, ele precisa de memória — depois da
+  primeira falha, não insistir na busca na mesma sessão. E erro 503
+  (congestionamento do modelo) não tem fallback útil: avisar na hora.
 - **Nunca transformar o fallback da busca em erro fatal.** Na rodada 8 o erro
   de cota (429) na chamada com grounding passou a virar mensagem de limite,
   sem tentar responder sem busca — e o app parou de responder em casos que

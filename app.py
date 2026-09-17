@@ -281,6 +281,29 @@ with tab_consulta:
         "final de cada resposta."
     )
 
+    if "busca_indisponivel" not in st.session_state:
+        st.session_state.busca_indisponivel = False
+
+    col_busca, col_aviso = st.columns([2, 3])
+    with col_busca:
+        usar_busca = st.toggle(
+            "🔎 Buscar em fontes na web",
+            value=True,
+            key="usar_busca_web",
+            help=(
+                "Ligada, a IA procura em sites confiáveis antes de responder e lista as "
+                "fontes — leva alguns segundos a mais. Desligada, a resposta sai mais "
+                "rápida, com o conhecimento do modelo."
+            ),
+        )
+    if st.session_state.busca_indisponivel and usar_busca:
+        with col_aviso:
+            st.caption(
+                "⏳ A busca na web não respondeu nesta sessão (limite ou indisponível), "
+                "então as próximas perguntas vão direto para a IA — mais rápido. "
+                "Recarregue a página para tentar a busca de novo."
+            )
+
     if st.session_state.historico_consulta:
         col_limpar, _ = st.columns([1, 4])
         with col_limpar:
@@ -313,9 +336,27 @@ with tab_consulta:
             with st.chat_message("assistant"):
                 with st.spinner("Consultando..."):
                     try:
+                        def marcar_busca_indisponivel():
+                            st.session_state.busca_indisponivel = True
+
+                        # Só tenta a busca se ela estiver ligada e ainda não
+                        # tiver falhado nesta sessão — assim uma pergunta não
+                        # fica esperando duas chamadas à toa.
+                        tentar_busca = usar_busca and not st.session_state.busca_indisponivel
                         resposta = get_gemini_response(
-                            pergunta, api_key, PROMPT_CONSULTA, buscar_na_web=True
+                            pergunta,
+                            api_key,
+                            PROMPT_CONSULTA,
+                            buscar_na_web=tentar_busca,
+                            ao_falhar_busca=marcar_busca_indisponivel,
                         )
+                        if not tentar_busca:
+                            # Aviso curto: o texto longo só aparece na primeira
+                            # vez em que a busca falha, não a cada pergunta.
+                            resposta += (
+                                "\n\n_🔎 Resposta sem busca na web — confira as fontes "
+                                "antes de aplicar clinicamente._"
+                            )
                         st.markdown(resposta)
                         st.session_state.historico_consulta.append(("assistant", resposta))
                         st.session_state.contador_ia += 1

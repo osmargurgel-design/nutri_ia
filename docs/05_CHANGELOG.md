@@ -5,6 +5,23 @@ e para você acompanharem o que já foi feito sem precisar reler a conversa toda
 
 ---
 
+## Rodada 8c — 2026-09-17 — Consulta técnica mais rápida e avisos melhores
+
+Contexto: a cota da busca na web (grounding) estava esgotada na chave, então
+cada pergunta fazia duas chamadas (com busca → falha → sem busca), demorando
+10-15s e repetindo um aviso longo a cada resposta. Somou-se a isso um erro 503
+do Google ("modelo congestionado"), que é do lado deles.
+
+- **Memória da sessão:** assim que a busca falha uma vez, o app para de tentar a
+  busca nas próximas perguntas daquela sessão — volta a ser uma chamada só.
+  Recarregar a página faz ele tentar de novo.
+- **Chavinha "🔎 Buscar em fontes na web"** na aba Consulta técnica (ligada por
+  padrão). Desligada, a resposta sai mais rápida, sem lista de fontes.
+- **Aviso curto:** o texto longo sobre a busca indisponível aparece só na
+  primeira vez; depois, cada resposta leva só uma linha discreta.
+- **Erro 503 (modelo congestionado):** mensagem clara em português, e sem
+  segunda tentativa na hora (que só faria esperar o dobro pelo mesmo erro).
+
 ## Rodada 8b — 2026-09-17 — Correção do aviso de limite (mesmo dia)
 
 - A rodada 8 tinha passado a mostrar "Limite de uso atingido" e PARAR quando a
