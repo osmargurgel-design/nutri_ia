@@ -103,6 +103,35 @@ provedor de IA, ferramenta de deploy, etc.
   fpdf2 — por isso "--" e "__" são neutralizados no texto (senão viram
   sublinhado/itálico sem querer).
 
+- **Antes de aplicar uma correção, testar a hipótese de verdade, não só
+  supor.** Lição de 18/09/2026: ao investigar lentidão no Planejador/Lista de
+  Compras/Folhetos, cheguei a suspeitar que a biblioteca do Gemini
+  (`google-genai`, fixada como `>=0.3` sem versão exata) pudesse estar
+  tentando de novo automaticamente em segundo plano nos erros 503, explicando
+  a demora. Antes de aplicar a correção (travar a versão), abri o
+  código-fonte real da biblioteca instalada e confirmei que essa "tentativa
+  automática" só entra em ação se o app pedir isso explicitamente — o que o
+  Nutri IA nunca fez. A hipótese caiu. Continua valendo travar a versão da
+  biblioteca como boa prática (evita comportamento surpresa em deploys
+  futuros), mas isso foi comunicado ao usuário como o que é — uma melhoria de
+  estabilidade, não a correção da lentidão relatada.
+
+- **`st.radio`/`st.selectbox` com `key` fixa não volta para a primeira opção
+  sozinho quando a lista de opções cresce.** Lição de 18/09/2026: o campo
+  "Plano de origem" dos Folhetos tinha `key="origem_folheto"` e, assim que um
+  plano passava a existir (opção nova "Usar plano gerado no Planejador"
+  aparecendo antes de "Colar outro plano"), o Streamlit mantinha a seleção
+  anterior ("Colar outro plano") em vez de ir para a primeira opção nova —
+  porque a `key` fixa preserva o valor escolhido antes, mesmo quando a lista
+  de opções muda. (O mesmo campo na Lista de Compras, sem `key` própria,
+  "funcionava" por acidente, porque o Streamlit gera uma chave automática que
+  muda junto com a lista de opções — não é um comportamento para depender de
+  propósito.) Corrigido definindo a seleção manualmente para a opção do
+  plano na primeira vez que ele passa a existir na sessão, sem travar o
+  campo (o profissional pode trocar depois à vontade). Vale lembrar disso em
+  qualquer novo campo de opções que dependa de algo que só passa a existir
+  durante a sessão (ex.: "Agenda" no futuro).
+
 ## Sobre o jeito de trabalhar com o usuário
 
 - **O usuário não é desenvolvedor.** Não conhece git, terminal, deploy — precisa

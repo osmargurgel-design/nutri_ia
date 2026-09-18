@@ -31,23 +31,32 @@ lista de compras, folheto) usam linguagem simples.
 
 ## As 5 funcionalidades (abas do app)
 
+Ordem das abas reorganizada em 18/09/2026: a Calculadora foi para o final de
+propósito, porque é a única aba independente (não compartilha paciente/plano
+com as outras); as demais abas, que trabalham em sequência com o mesmo
+paciente/plano, ficam juntas no começo.
+
 1. **💬 Consulta técnica** — chat com IA para tirar dúvidas técnicas rápidas
    durante o atendimento. Usa busca na web em tempo real (Grounding with Google
    Search) e cita as fontes usadas ao final da resposta, priorizando fontes
    confiáveis (OMS, Ministério da Saúde, sociedades de nutrição, PubMed, SciELO).
-2. **🧮 Calculadora** — calcula IMC, TMB (Mifflin-St Jeor ou Harris-Benedict), GET
-   e faixa calórica por objetivo. Permite baixar os resultados em `.docx`.
-3. **📋 Planejador** — formulário estruturado (não é mais texto livre) onde o
+2. **📋 Planejador** — formulário estruturado (não é mais texto livre) onde o
    profissional preenche campo por campo (objetivo, refeições, alimentos
    recomendados/evitar, hidratação, suplementação, observações). A IA só
    reformata/organiza em linguagem para o paciente — não inventa conteúdo
    clínico. Gera um `.docx` com o nome do paciente no título.
-4. **🛒 Lista de compras** — a partir de um plano (gerado no Planejador ou colado
+3. **🛒 Lista de compras** — a partir de um plano (gerado no Planejador ou colado
    manualmente), gera lista de compras por categoria, substituições inteligentes
-   e uma versão simples para o paciente. Baixa em `.docx`.
-5. **📄 Folhetos educativos** — a partir de um plano + um tema escolhido pelo
+   e uma versão simples para o paciente. Baixa em `.docx`. Quando usa o plano do
+   Planejador, o nome do paciente já vem preenchido automaticamente.
+4. **📄 Folhetos educativos** — a partir de um plano + um tema escolhido pelo
    profissional, gera um folheto educativo pronto para entregar ao paciente.
-   Baixa em `.pdf`.
+   Baixa em `.pdf`. Nome do paciente (novo campo) e nome/CRN do nutricionista
+   também vêm preenchidos automaticamente quando possível.
+5. **🧮 Calculadora** — calcula IMC, TMB (Mifflin-St Jeor ou Harris-Benedict), GET
+   e faixa calórica por objetivo. Permite baixar os resultados em `.docx`.
+   **Independente das outras abas** — não compartilha nome de paciente nem
+   plano com elas (aviso disso aparece na própria tela).
 
 ## Estilo visual
 

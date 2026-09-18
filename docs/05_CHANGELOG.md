@@ -5,6 +5,55 @@ e para você acompanharem o que já foi feito sem precisar reler a conversa toda
 
 ---
 
+## Rodada 9 — 2026-09-18 — Preenchimento automático de nomes + Calculadora independente
+
+- **Nome do paciente preenchido automaticamente:** ao gerar um plano no
+  Planejador e depois abrir a Lista de Compras ou os Folhetos usando "Usar
+  plano gerado no Planejador", o nome do paciente já vem preenchido — não
+  precisa digitar de novo. Continua editável (dá para trocar a qualquer
+  momento) e, se você trocar para "Colar outro plano", o campo é limpo
+  automaticamente (só quando não foi editado à mão) para não sugerir o nome
+  errado num plano diferente.
+- **Aba Folhetos ganhou campo de nome do paciente** (antes só tinha tema e
+  nome da clínica) — o nome aparece no título do documento gerado e ajuda a
+  identificar o arquivo depois.
+- **Nome/CRN do nutricionista preenchidos automaticamente no Folheto:** o
+  campo "Nome da clínica/nutricionista para o rodapé" agora já vem com o
+  nome e CRN da barra lateral, sem precisar digitar de novo — continua
+  editável para quem preferir assinar diferente (ex. nome da clínica).
+- **Corrigido, durante os testes desta rodada:** a aba Folhetos não estava
+  selecionando automaticamente "Usar plano gerado no Planejador" quando um
+  plano já existia — ficava presa em "Colar outro plano" por causa de um
+  detalhe de como o Streamlit lembra a seleção de um campo. Agora, assim que
+  um plano existir pela primeira vez na sessão, tanto a Lista de Compras
+  quanto os Folhetos selecionam ele automaticamente (e continuam respeitando
+  se você trocar manualmente depois).
+- **Calculadora agora é a última aba** (antes era a 2ª, logo depois de
+  Consulta técnica) — e ganhou um aviso deixando claro que ela é
+  independente: o nome de paciente preenchido ali não é usado em nenhuma
+  outra aba, e vice-versa.
+- Nada mudou na geração de texto pela IA (prompts, modelo) nem na aparência
+  visual das cores — só esses ajustes de preenchimento e organização das
+  abas.
+
+## Rodada 8e — 2026-09-18 — Detalhe técnico nos erros de IA (para conferência)
+
+Contexto: o usuário reportou que o Planejador (que sempre usou pouca IA e era
+rápido) passou a mostrar "modelo congestionado" com frequência, e pediu pra
+confirmar se a mensagem era mesmo verdadeira ou se tinha algo errado no app.
+
+- **Conferido:** o Planejador continua chamando a IA exatamente como sempre
+  chamou — uma chamada só, sem busca na web. Nada nas rodadas 8/8b/8c/8d
+  mudou isso. A mensagem de "congestionado" só aparece quando o texto do erro
+  devolvido pela própria Google contém "503"/"unavailable"/"overloaded" — ou
+  seja, reflete um erro real do lado da Google, não é inventada pelo app;
+  antes ela aparecia do mesmo jeito, só que com o texto técnico cru em inglês
+  em vez dessa frase mais clara.
+- **Adicionado:** agora, quando esse erro (ou o de "resposta vazia sem
+  motivo") acontecer, a mensagem na tela traz uma segunda linha com o detalhe
+  técnico original por trás da tradução — assim dá pra conferir com certeza,
+  sem depender de acesso aos registros do Streamlit Cloud.
+
 ## Rodada 8d — 2026-09-17 — Corrige resposta "vazia" na Consulta técnica
 
 - Encontrado o motivo do "não funciona nem uma pergunta simples": em algumas

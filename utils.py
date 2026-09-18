@@ -46,6 +46,16 @@ MENSAGEM_CONGESTIONADO = (
     "daqui a pouco."
 )
 
+
+def _com_detalhe_tecnico(mensagem_amigavel: str, detalhe_bruto: str) -> str:
+    """Anexa o texto original do erro (truncado) a uma mensagem amigável, para
+    conferência — sem essa informação, não dá para confirmar depois se o app
+    classificou o erro certo ou não."""
+    detalhe = detalhe_bruto.strip().replace("\n", " ")
+    if len(detalhe) > 220:
+        detalhe = detalhe[:220] + "..."
+    return f"{mensagem_amigavel}\n\n_Detalhe técnico (para conferência): {detalhe}_"
+
 # Quando o Gemini interrompe a resposta por segurança, cada valor de
 # finish_reason vira uma explicação em português para o profissional.
 _MOTIVOS_RESPOSTA_VAZIA = {
@@ -83,8 +93,11 @@ def _texto_da_resposta(response) -> str:
             "identifiquem."
         )
     raise RuntimeError(
-        "O Gemini não devolveu uma resposta desta vez (não é limite de uso nem erro de "
-        "conexão). Tente reformular a pergunta de forma mais direta ou envie de novo."
+        _com_detalhe_tecnico(
+            "O Gemini não devolveu uma resposta desta vez (não é limite de uso nem erro de "
+            "conexão). Tente reformular a pergunta de forma mais direta ou envie de novo.",
+            f"finish_reason={finish_reason or 'não informado'}",
+        )
     )
 
 
@@ -128,7 +141,7 @@ def get_gemini_response(
             if _eh_erro_de_congestionamento(str(exc)):
                 # Modelo sobrecarregado: tentar de novo agora só faria o
                 # profissional esperar o dobro para receber o mesmo erro.
-                raise RuntimeError(MENSAGEM_CONGESTIONADO) from exc
+                raise RuntimeError(_com_detalhe_tecnico(MENSAGEM_CONGESTIONADO, str(exc))) from exc
             if callable(ao_falhar_busca):
                 ao_falhar_busca()
             if _eh_erro_de_limite(str(exc)):
@@ -213,7 +226,7 @@ def _gerar_sem_busca(client, prompt: str, system_instruction: str) -> str:
     except Exception as exc:  # noqa: BLE001 - queremos capturar qualquer erro da API
         mensagem = str(exc)
         if _eh_erro_de_congestionamento(mensagem):
-            raise RuntimeError(MENSAGEM_CONGESTIONADO) from exc
+            raise RuntimeError(_com_detalhe_tecnico(MENSAGEM_CONGESTIONADO, mensagem)) from exc
         if _eh_erro_de_limite(mensagem):
             raise RuntimeError(
                 "Limite de uso da API do Gemini atingido. Aguarde um pouco antes de tentar "

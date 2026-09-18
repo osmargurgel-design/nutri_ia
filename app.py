@@ -3,10 +3,11 @@ Nutri IA — Assistente de apoio ao dia a dia do profissional nutricionista.
 
 Módulos:
 1. Consulta técnica  — dúvidas nutricionais rápidas com embasamento científico
-2. Calculadora        — IMC, TMB, GET e faixa calórica por objetivo
-3. Planejador          — transforma anotações de consulta em plano formatado
-4. Lista de compras    — lista + substituições + versão simples a partir de um plano
-5. Folhetos educativos — material em PDF para o paciente, a partir de um plano
+2. Planejador          — transforma anotações de consulta em plano formatado
+3. Lista de compras    — lista + substituições + versão simples a partir de um plano
+4. Folhetos educativos — material em PDF para o paciente, a partir de um plano
+5. Calculadora         — IMC, TMB, GET e faixa calórica por objetivo (independente
+                          das demais abas — não compartilha paciente/plano com elas)
 """
 
 import streamlit as st
@@ -251,18 +252,44 @@ def cabecalho_profissional() -> str:
     return "  |  ".join(partes)
 
 
+def _preencher_nome_automatico(chave_widget: str, chave_rastreio: str, nome_fonte: str) -> None:
+    """Pré-preenche um campo de nome (paciente ou profissional) com `nome_fonte`,
+    SEM sobrescrever o que o profissional já digitou manualmente.
+
+    Regra de segurança: só chame esta função passando `nome_fonte` quando a
+    ligação for garantida (ex.: o mesmo plano carregado no Planejador, ou o
+    nome já preenchido na barra lateral) — nunca com um nome "lembrado" de um
+    paciente anterior sem relação comprovada com o documento atual.
+
+    Se `nome_fonte` vier vazio (ex.: o profissional trocou para "Colar outro
+    plano", quebrando a ligação garantida) e o campo ainda tiver o valor que
+    esta função preencheu da última vez, o campo é limpo — para não sugerir
+    um nome que pode já não corresponder ao documento atual.
+    """
+    valor_atual = st.session_state.get(chave_widget, "")
+    ultimo_auto = st.session_state.get(chave_rastreio, "")
+    if nome_fonte:
+        if not valor_atual or valor_atual == ultimo_auto:
+            st.session_state[chave_widget] = nome_fonte
+            st.session_state[chave_rastreio] = nome_fonte
+    else:
+        if valor_atual and valor_atual == ultimo_auto:
+            st.session_state[chave_widget] = ""
+            st.session_state[chave_rastreio] = ""
+
+
 if "historico_consulta" not in st.session_state:
     st.session_state.historico_consulta = []
 if "plano_atual" not in st.session_state:
     st.session_state.plano_atual = ""
 
-tab_consulta, tab_calc, tab_plano, tab_lista, tab_folheto = st.tabs(
+tab_consulta, tab_plano, tab_lista, tab_folheto, tab_calc = st.tabs(
     [
         "💬 Consulta técnica",
-        "🧮 Calculadora",
         "📋 Planejador",
         "🛒 Lista de compras",
         "📄 Folhetos educativos",
+        "🧮 Calculadora",
     ]
 )
 
@@ -371,103 +398,7 @@ with tab_consulta:
             st.rerun()
 
 # ---------------------------------------------------------------------------
-# Aba 2 — Calculadora nutricional
-# ---------------------------------------------------------------------------
-with tab_calc:
-    st.subheader("IMC, TMB, gasto energético e faixa calórica")
-    st.caption("Cálculos de apoio à avaliação — sempre ajuste com seu julgamento clínico.")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        peso = st.number_input("Peso (kg)", min_value=1.0, max_value=400.0, value=70.0, step=0.5)
-        altura = st.number_input("Altura (cm)", min_value=50.0, max_value=250.0, value=170.0, step=0.5)
-        idade = st.number_input("Idade (anos)", min_value=1, max_value=120, value=30)
-    with col2:
-        sexo = st.radio("Sexo biológico", ["Feminino", "Masculino"], horizontal=True)
-        formula_tmb = st.radio(
-            "Fórmula da TMB", ["Mifflin-St Jeor", "Harris-Benedict"], horizontal=True
-        )
-        nivel_atividade = st.selectbox("Nível de atividade física", list(FATORES_ATIVIDADE.keys()))
-        objetivo = st.selectbox("Objetivo (opcional)", ["—"] + list(AJUSTE_OBJETIVO.keys()))
-
-    nome_paciente_calc = st.text_input(
-        "Nome do paciente (opcional — aparece no título do documento e no nome do arquivo)",
-        key="calc_paciente",
-    )
-
-    if st.button("Calcular", type="primary"):
-        imc_resultado = calcular_imc(peso, altura)
-        tmb_resultado = calcular_tmb(peso, altura, int(idade), sexo, formula_tmb)
-        get_resultado = calcular_get(tmb_resultado, nivel_atividade)
-        faixa_min = faixa_max = None
-        if objetivo != "—":
-            faixa_min, faixa_max = calcular_faixa_calorica(get_resultado, objetivo)
-
-        st.session_state.calc_resultado = {
-            "peso": peso, "altura": altura, "idade": idade, "sexo": sexo,
-            "formula_tmb": formula_tmb, "nivel_atividade": nivel_atividade,
-            "objetivo": objetivo, "imc": imc_resultado, "tmb": tmb_resultado,
-            "get": get_resultado, "faixa_min": faixa_min, "faixa_max": faixa_max,
-        }
-
-    if st.session_state.get("calc_resultado"):
-        r = st.session_state.calc_resultado
-        with st.container(border=True):
-            st.markdown("**INDICADORES ATUAIS**")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("IMC", f"{r['imc']['imc']}", r['imc']['classificacao'])
-            c2.metric(f"TMB ({r['formula_tmb']})", f"{r['tmb']:.0f} kcal/dia")
-            c3.metric("GET (gasto total estimado)", f"{r['get']:.0f} kcal/dia")
-
-            if r["faixa_min"] is not None:
-                st.info(f"Faixa calórica estimada para **{r['objetivo'].lower()}**: {r['faixa_min']:.0f} – {r['faixa_max']:.0f} kcal/dia")
-
-            st.caption(
-                "O IMC não diferencia massa magra de massa gorda nem considera composição "
-                "corporal — use como indicador de triagem, não diagnóstico. Os valores de TMB/GET "
-                "são estimativas; ajuste conforme julgamento clínico e, quando disponível, métodos "
-                "mais precisos (bioimpedância, calorimetria indireta)."
-            )
-
-            linhas_calc = [
-                f"## Dados informados",
-                f"- Peso: {r['peso']} kg",
-                f"- Altura: {r['altura']} cm",
-                f"- Idade: {r['idade']} anos",
-                f"- Sexo biológico: {r['sexo']}",
-                f"- Nível de atividade: {r['nivel_atividade']}",
-                f"",
-                f"## Resultados",
-                f"- IMC: {r['imc']['imc']} ({r['imc']['classificacao']})",
-                f"- TMB ({r['formula_tmb']}): {r['tmb']:.0f} kcal/dia",
-                f"- GET (gasto energético total estimado): {r['get']:.0f} kcal/dia",
-            ]
-            if r["faixa_min"] is not None:
-                linhas_calc.append(f"- Faixa calórica para {r['objetivo'].lower()}: {r['faixa_min']:.0f} – {r['faixa_max']:.0f} kcal/dia")
-
-            titulo_calc = (
-                f"Cálculos nutricionais — {nome_paciente_calc.strip()}"
-                if nome_paciente_calc.strip()
-                else "Cálculos nutricionais"
-            )
-            docx_calc = markdown_para_docx(
-                titulo_calc,
-                "\n".join(linhas_calc),
-                assinatura_rodape(
-                    "Valores estimados de apoio à decisão clínica — não substituem avaliação "
-                    "completa nem métodos mais precisos (bioimpedância, calorimetria indireta)."
-                ),
-                cabecalho=cabecalho_profissional(),
-            )
-            st.download_button(
-                "⬇️ Baixar cálculos em .docx",
-                data=docx_calc,
-                file_name=nome_arquivo("calculos", nome_paciente_calc or "paciente", "docx"),
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
-
-# ---------------------------------------------------------------------------
-# Aba 3 — Planejador nutricional
+# Aba 2 — Planejador nutricional
 # ---------------------------------------------------------------------------
 with tab_plano:
     st.subheader("Monte o plano alimentar do paciente")
@@ -577,16 +508,24 @@ with tab_plano:
             st.caption("💡 Este plano fica disponível nas abas Lista de Compras e Folhetos Educativos para gerar os materiais complementares.")
 
 # ---------------------------------------------------------------------------
-# Aba 4 — Lista de compras
+# Aba 3 — Lista de compras
 # ---------------------------------------------------------------------------
 with tab_lista:
     st.subheader("Lista de compras, substituições e versão simples para o paciente")
 
     usar_plano_atual = bool(st.session_state.plano_atual)
+    # Assim que um plano existir pela primeira vez nesta sessão, seleciona
+    # "Usar plano gerado no Planejador" automaticamente (só da primeira vez —
+    # depois disso, respeita a escolha do profissional, mesmo que ele prefira
+    # "Colar outro plano").
+    if usar_plano_atual and not st.session_state.get("_origem_lista_ofereceu_plano"):
+        st.session_state["origem_lista"] = "Usar plano gerado no Planejador"
+        st.session_state["_origem_lista_ofereceu_plano"] = True
     origem = st.radio(
         "Plano de origem",
         (["Usar plano gerado no Planejador"] if usar_plano_atual else []) + ["Colar outro plano"],
         horizontal=True,
+        key="origem_lista",
     )
 
     if origem == "Usar plano gerado no Planejador":
@@ -595,6 +534,11 @@ with tab_lista:
     else:
         plano_texto = st.text_area("Cole aqui o plano alimentar já pronto", height=220, key="lista_plano_colado")
 
+    # Nome do paciente pré-preenchido automaticamente quando o plano usado é o
+    # mesmo carregado no Planejador (ligação garantida) — sempre editável, e
+    # limpo automaticamente se a origem mudar para um plano colado à parte.
+    nome_do_plano = st.session_state.get("plano_paciente_nome", "") if origem == "Usar plano gerado no Planejador" else ""
+    _preencher_nome_automatico("lista_paciente", "_lista_paciente_auto", nome_do_plano)
     nome_paciente_lista = st.text_input("Nome do paciente", key="lista_paciente")
 
     if st.button("Gerar lista de compras", type="primary", key="btn_lista"):
@@ -627,12 +571,17 @@ with tab_lista:
             )
 
 # ---------------------------------------------------------------------------
-# Aba 5 — Folhetos educativos
+# Aba 4 — Folhetos educativos
 # ---------------------------------------------------------------------------
 with tab_folheto:
     st.subheader("Folhetos educativos em PDF a partir de um plano existente")
 
     usar_plano_atual_folheto = bool(st.session_state.plano_atual)
+    # Mesma regra da Lista de Compras: seleciona o plano do Planejador
+    # automaticamente assim que ele existir pela primeira vez na sessão.
+    if usar_plano_atual_folheto and not st.session_state.get("_origem_folheto_ofereceu_plano"):
+        st.session_state["origem_folheto"] = "Usar plano gerado no Planejador"
+        st.session_state["_origem_folheto_ofereceu_plano"] = True
     origem_folheto = st.radio(
         "Plano de origem",
         (["Usar plano gerado no Planejador"] if usar_plano_atual_folheto else []) + ["Colar outro plano"],
@@ -646,11 +595,32 @@ with tab_folheto:
     else:
         plano_texto_folheto = st.text_area("Cole aqui o plano alimentar já pronto", height=220, key="folheto_plano_colado")
 
+    # Nome do paciente pré-preenchido automaticamente quando o plano usado é o
+    # mesmo carregado no Planejador (mesma regra da Lista de Compras acima).
+    nome_do_plano_folheto = (
+        st.session_state.get("plano_paciente_nome", "") if origem_folheto == "Usar plano gerado no Planejador" else ""
+    )
+    _preencher_nome_automatico("folheto_paciente", "_folheto_paciente_auto", nome_do_plano_folheto)
+    nome_paciente_folheto = st.text_input(
+        "Nome do paciente (opcional — aparece no título do documento e ajuda a identificar o arquivo depois)",
+        key="folheto_paciente",
+    )
+
     tema = st.text_input(
         "Tema do folheto",
         placeholder="Ex.: hidratação, lanches práticos, como ler rótulos, substituições de açúcar...",
     )
-    nome_clinica = st.text_input("Nome da clínica/nutricionista para o rodapé (opcional)")
+
+    # Nome/CRN da barra lateral pré-preenchidos aqui também (mesmo
+    # profissional, sempre editável — útil para quem prefere assinar com o
+    # nome da clínica em vez do próprio nome nesse campo específico).
+    _preencher_nome_automatico(
+        "folheto_nome_clinica", "_folheto_clinica_auto", assinatura_rodape().strip()
+    )
+    nome_clinica = st.text_input(
+        "Nome da clínica/nutricionista para o rodapé (opcional)",
+        key="folheto_nome_clinica",
+    )
 
     if st.button("Gerar folheto", type="primary", key="btn_folheto"):
         if not plano_texto_folheto or not tema:
@@ -662,6 +632,7 @@ with tab_folheto:
                     resultado = get_gemini_response(prompt, api_key, PROMPT_FOLHETO)
                     st.session_state.folheto_resultado = resultado
                     st.session_state.folheto_tema = tema
+                    st.session_state.folheto_paciente_nome = nome_paciente_folheto.strip()
                     st.session_state.contador_ia += 1
                 except (ValueError, RuntimeError) as erro:
                     st.error(str(erro))
@@ -670,8 +641,12 @@ with tab_folheto:
         with st.container(border=True):
             st.markdown(st.session_state.folheto_resultado)
             rodape = nome_clinica or assinatura_rodape()
+            nome_pac_folheto_doc = st.session_state.get("folheto_paciente_nome", "")
+            titulo_folheto = f"Folheto — {st.session_state.get('folheto_tema', 'Orientação nutricional')}"
+            if nome_pac_folheto_doc:
+                titulo_folheto += f" — {nome_pac_folheto_doc}"
             pdf_bytes = markdown_para_pdf(
-                f"Folheto — {st.session_state.get('folheto_tema', 'Orientação nutricional')}",
+                titulo_folheto,
                 st.session_state.folheto_resultado,
                 rodape,
                 cabecalho=cabecalho_profissional(),
@@ -679,6 +654,114 @@ with tab_folheto:
             st.download_button(
                 "⬇️ Baixar folheto em .pdf",
                 data=pdf_bytes,
-                file_name=nome_arquivo("folheto", st.session_state.get("folheto_tema", "paciente"), "pdf"),
+                file_name=nome_arquivo(
+                    "folheto",
+                    nome_pac_folheto_doc or st.session_state.get("folheto_tema", "paciente"),
+                    "pdf",
+                ),
                 mime="application/pdf",
+            )
+
+# ---------------------------------------------------------------------------
+# Aba 5 — Calculadora nutricional
+# Fica por último de propósito: é independente das outras abas (não
+# compartilha nome de paciente nem plano com Planejador/Lista/Folhetos).
+# ---------------------------------------------------------------------------
+with tab_calc:
+    st.subheader("IMC, TMB, gasto energético e faixa calórica")
+    st.caption("Cálculos de apoio à avaliação — sempre ajuste com seu julgamento clínico.")
+    st.info(
+        "ℹ️ Esta calculadora é independente das outras abas: o nome de paciente informado "
+        "aqui não é compartilhado com o Planejador, a Lista de Compras ou os Folhetos "
+        "(e nada dessas abas aparece aqui automaticamente). Preencha o nome separadamente "
+        "em cada aba conforme o atendimento em andamento."
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        peso = st.number_input("Peso (kg)", min_value=1.0, max_value=400.0, value=70.0, step=0.5)
+        altura = st.number_input("Altura (cm)", min_value=50.0, max_value=250.0, value=170.0, step=0.5)
+        idade = st.number_input("Idade (anos)", min_value=1, max_value=120, value=30)
+    with col2:
+        sexo = st.radio("Sexo biológico", ["Feminino", "Masculino"], horizontal=True)
+        formula_tmb = st.radio(
+            "Fórmula da TMB", ["Mifflin-St Jeor", "Harris-Benedict"], horizontal=True
+        )
+        nivel_atividade = st.selectbox("Nível de atividade física", list(FATORES_ATIVIDADE.keys()))
+        objetivo = st.selectbox("Objetivo (opcional)", ["—"] + list(AJUSTE_OBJETIVO.keys()))
+
+    nome_paciente_calc = st.text_input(
+        "Nome do paciente (opcional — aparece no título do documento e no nome do arquivo)",
+        key="calc_paciente",
+    )
+
+    if st.button("Calcular", type="primary"):
+        imc_resultado = calcular_imc(peso, altura)
+        tmb_resultado = calcular_tmb(peso, altura, int(idade), sexo, formula_tmb)
+        get_resultado = calcular_get(tmb_resultado, nivel_atividade)
+        faixa_min = faixa_max = None
+        if objetivo != "—":
+            faixa_min, faixa_max = calcular_faixa_calorica(get_resultado, objetivo)
+
+        st.session_state.calc_resultado = {
+            "peso": peso, "altura": altura, "idade": idade, "sexo": sexo,
+            "formula_tmb": formula_tmb, "nivel_atividade": nivel_atividade,
+            "objetivo": objetivo, "imc": imc_resultado, "tmb": tmb_resultado,
+            "get": get_resultado, "faixa_min": faixa_min, "faixa_max": faixa_max,
+        }
+
+    if st.session_state.get("calc_resultado"):
+        r = st.session_state.calc_resultado
+        with st.container(border=True):
+            st.markdown("**INDICADORES ATUAIS**")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("IMC", f"{r['imc']['imc']}", r['imc']['classificacao'])
+            c2.metric(f"TMB ({r['formula_tmb']})", f"{r['tmb']:.0f} kcal/dia")
+            c3.metric("GET (gasto total estimado)", f"{r['get']:.0f} kcal/dia")
+
+            if r["faixa_min"] is not None:
+                st.info(f"Faixa calórica estimada para **{r['objetivo'].lower()}**: {r['faixa_min']:.0f} – {r['faixa_max']:.0f} kcal/dia")
+
+            st.caption(
+                "O IMC não diferencia massa magra de massa gorda nem considera composição "
+                "corporal — use como indicador de triagem, não diagnóstico. Os valores de TMB/GET "
+                "são estimativas; ajuste conforme julgamento clínico e, quando disponível, métodos "
+                "mais precisos (bioimpedância, calorimetria indireta)."
+            )
+
+            linhas_calc = [
+                f"## Dados informados",
+                f"- Peso: {r['peso']} kg",
+                f"- Altura: {r['altura']} cm",
+                f"- Idade: {r['idade']} anos",
+                f"- Sexo biológico: {r['sexo']}",
+                f"- Nível de atividade: {r['nivel_atividade']}",
+                f"",
+                f"## Resultados",
+                f"- IMC: {r['imc']['imc']} ({r['imc']['classificacao']})",
+                f"- TMB ({r['formula_tmb']}): {r['tmb']:.0f} kcal/dia",
+                f"- GET (gasto energético total estimado): {r['get']:.0f} kcal/dia",
+            ]
+            if r["faixa_min"] is not None:
+                linhas_calc.append(f"- Faixa calórica para {r['objetivo'].lower()}: {r['faixa_min']:.0f} – {r['faixa_max']:.0f} kcal/dia")
+
+            titulo_calc = (
+                f"Cálculos nutricionais — {nome_paciente_calc.strip()}"
+                if nome_paciente_calc.strip()
+                else "Cálculos nutricionais"
+            )
+            docx_calc = markdown_para_docx(
+                titulo_calc,
+                "\n".join(linhas_calc),
+                assinatura_rodape(
+                    "Valores estimados de apoio à decisão clínica — não substituem avaliação "
+                    "completa nem métodos mais precisos (bioimpedância, calorimetria indireta)."
+                ),
+                cabecalho=cabecalho_profissional(),
+            )
+            st.download_button(
+                "⬇️ Baixar cálculos em .docx",
+                data=docx_calc,
+                file_name=nome_arquivo("calculos", nome_paciente_calc or "paciente", "docx"),
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
