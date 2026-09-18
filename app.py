@@ -37,6 +37,8 @@ from utils import (
     markdown_para_docx,
     markdown_para_pdf,
     nome_arquivo,
+    extrair_texto_arquivo,
+    quebras_para_exibicao,
 )
 
 st.set_page_config(page_title=NOME_APP, page_icon="🩺", layout="wide")
@@ -402,10 +404,17 @@ with tab_consulta:
 # ---------------------------------------------------------------------------
 with tab_plano:
     st.subheader("Monte o plano alimentar do paciente")
-    st.caption(
-        "Preencha os campos que fizer sentido para esta consulta — não precisa preencher "
-        "tudo. O que ficar em branco aparece como \"Não informado\" no documento final, "
-        "sem o Nutri IA inventar nada no lugar."
+
+    modo_plano = st.radio(
+        "Como você quer montar o plano desta consulta?",
+        ["Preencher o formulário", "Colar ou carregar um plano já pronto"],
+        horizontal=True,
+        key="plano_modo",
+        help=(
+            "Use \"Preencher o formulário\" quando ainda vai montar o plano agora. Use "
+            "\"Colar ou carregar\" quando o plano já está pronto em outro lugar (ex.: Word) "
+            "e você só quer usá-lo aqui, sem redigitar."
+        ),
     )
 
     col_a, col_b = st.columns(2)
@@ -414,81 +423,132 @@ with tab_plano:
     with col_b:
         data_consulta = st.date_input("Data da consulta", key="plano_data", format="DD/MM/YYYY")
 
-    objetivo_acompanhamento = st.text_area(
-        "Objetivo do acompanhamento", height=80, key="plano_objetivo",
-        placeholder="Ex.: emagrecimento, ganho de massa magra, controle glicêmico...",
-    )
-    orientacoes_gerais = st.text_area(
-        "Orientações gerais", height=80, key="plano_orientacoes",
-        placeholder="Ex.: fracionar refeições, mastigar devagar, evitar frituras...",
-    )
+    if modo_plano == "Colar ou carregar um plano já pronto":
+        st.caption(
+            "Cole o texto do plano já pronto, ou envie o arquivo (.docx ou .pdf com texto "
+            "selecionável — não funciona com PDF de documento escaneado ou foto, que não "
+            "tem texto de verdade dentro). O plano é usado exatamente como está, sem a IA "
+            "reescrever nada — mais rápido e sem gastar cota da IA."
+        )
+        plano_colado = st.text_area(
+            "Cole aqui o plano já pronto (opcional se for enviar um arquivo abaixo)",
+            height=220, key="plano_colado",
+        )
+        arquivo_plano = st.file_uploader(
+            "Ou envie o arquivo do plano (.docx ou .pdf)",
+            type=["docx", "pdf"],
+            key="plano_arquivo",
+        )
 
-    st.markdown("**Plano alimentar por refeição** (preencha as que se aplicarem)")
-    col_r1, col_r2 = st.columns(2)
-    with col_r1:
-        cafe_manha = st.text_area("Café da manhã", height=70, key="plano_cafe")
-        almoco = st.text_area("Almoço", height=70, key="plano_almoco")
-        lanches = st.text_area("Lanches", height=70, key="plano_lanches")
-    with col_r2:
-        jantar = st.text_area("Jantar", height=70, key="plano_jantar")
-        ceia = st.text_area("Ceia", height=70, key="plano_ceia")
-
-    col_c, col_d = st.columns(2)
-    with col_c:
-        alimentos_recomendados = st.text_area("Alimentos recomendados", height=80, key="plano_recomendados")
-        hidratacao = st.text_area("Hidratação", height=70, key="plano_hidratacao")
-    with col_d:
-        alimentos_evitar = st.text_area("Alimentos a evitar/restringir", height=80, key="plano_evitar")
-        suplementacao = st.text_area("Suplementação (se houver)", height=70, key="plano_suplementacao")
-
-    observacoes = st.text_area(
-        "Observações e próximos passos", height=80, key="plano_observacoes",
-        placeholder="Ex.: retorno em 30 dias, solicitar exames, reavaliação antropométrica...",
-    )
-    anotacoes_livres = st.text_area(
-        "Anotações adicionais (opcional)", height=100, key="plano_anotacoes_livres",
-        placeholder="Qualquer outra observação da consulta que não se encaixe nos campos acima.",
-    )
-
-    if st.button("Gerar plano formatado", type="primary", key="btn_plano"):
-        if not nome_paciente:
-            st.warning("Informe pelo menos o nome do paciente para gerar o documento.")
-        else:
-            campos_preenchidos = {
-                "Objetivo do acompanhamento": objetivo_acompanhamento,
-                "Orientações gerais": orientacoes_gerais,
-                "Café da manhã": cafe_manha,
-                "Almoço": almoco,
-                "Lanches": lanches,
-                "Jantar": jantar,
-                "Ceia": ceia,
-                "Alimentos recomendados": alimentos_recomendados,
-                "Alimentos a evitar/restringir": alimentos_evitar,
-                "Hidratação": hidratacao,
-                "Suplementação": suplementacao,
-                "Observações e próximos passos": observacoes,
-                "Anotações adicionais": anotacoes_livres,
-            }
-            if not any(v.strip() for v in campos_preenchidos.values()):
-                st.warning("Preencha pelo menos um campo além do nome do paciente.")
+        if st.button("Usar este plano", type="primary", key="btn_plano_pronto"):
+            if not nome_paciente:
+                st.warning("Informe pelo menos o nome do paciente.")
+            elif not plano_colado.strip() and not arquivo_plano:
+                st.warning("Cole o texto do plano ou envie um arquivo.")
             else:
-                with st.spinner("Formatando plano..."):
-                    try:
-                        data_consulta_br = data_consulta.strftime("%d/%m/%Y")
-                        blocos = [f"Nome do paciente: {nome_paciente}", f"Data da consulta: {data_consulta_br}"]
-                        for titulo, valor in campos_preenchidos.items():
-                            blocos.append(f"\n{titulo}: {valor.strip() if valor.strip() else '(não preenchido)'}")
-                        prompt = "\n".join(blocos)
-                        resultado = get_gemini_response(prompt, api_key, PROMPT_PLANEJADOR)
-                        st.session_state.plano_atual = resultado
-                        st.session_state.plano_paciente_nome = nome_paciente
-                        st.session_state.contador_ia += 1
-                    except (ValueError, RuntimeError) as erro:
-                        st.error(str(erro))
+                try:
+                    if arquivo_plano is not None:
+                        texto_plano_pronto = extrair_texto_arquivo(arquivo_plano)
+                    else:
+                        texto_plano_pronto = plano_colado.strip()
+                    st.session_state.plano_atual = texto_plano_pronto
+                    st.session_state.plano_paciente_nome = nome_paciente
+                    st.session_state.plano_origem = "arquivo"
+                    st.success(
+                        "✅ Plano carregado! Ele já aparece aqui embaixo e fica disponível "
+                        "nas abas Lista de Compras e Folhetos Educativos."
+                    )
+                except ValueError as erro:
+                    st.error(str(erro))
+
+    else:
+        st.caption(
+            "Preencha os campos que fizer sentido para esta consulta — não precisa "
+            "preencher tudo. O que ficar em branco aparece como \"Não informado\" no "
+            "documento final, sem o Nutri IA inventar nada no lugar."
+        )
+        objetivo_acompanhamento = st.text_area(
+            "Objetivo do acompanhamento", height=80, key="plano_objetivo",
+            placeholder="Ex.: emagrecimento, ganho de massa magra, controle glicêmico...",
+        )
+        orientacoes_gerais = st.text_area(
+            "Orientações gerais", height=80, key="plano_orientacoes",
+            placeholder="Ex.: fracionar refeições, mastigar devagar, evitar frituras...",
+        )
+
+        st.markdown("**Plano alimentar por refeição** (preencha as que se aplicarem)")
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            cafe_manha = st.text_area("Café da manhã", height=70, key="plano_cafe")
+            almoco = st.text_area("Almoço", height=70, key="plano_almoco")
+            lanches = st.text_area("Lanches", height=70, key="plano_lanches")
+        with col_r2:
+            jantar = st.text_area("Jantar", height=70, key="plano_jantar")
+            ceia = st.text_area("Ceia", height=70, key="plano_ceia")
+
+        col_c, col_d = st.columns(2)
+        with col_c:
+            alimentos_recomendados = st.text_area("Alimentos recomendados", height=80, key="plano_recomendados")
+            hidratacao = st.text_area("Hidratação", height=70, key="plano_hidratacao")
+        with col_d:
+            alimentos_evitar = st.text_area("Alimentos a evitar/restringir", height=80, key="plano_evitar")
+            suplementacao = st.text_area("Suplementação (se houver)", height=70, key="plano_suplementacao")
+
+        observacoes = st.text_area(
+            "Observações e próximos passos", height=80, key="plano_observacoes",
+            placeholder="Ex.: retorno em 30 dias, solicitar exames, reavaliação antropométrica...",
+        )
+        anotacoes_livres = st.text_area(
+            "Anotações adicionais (opcional)", height=100, key="plano_anotacoes_livres",
+            placeholder="Qualquer outra observação da consulta que não se encaixe nos campos acima.",
+        )
+
+        if st.button("Gerar plano formatado", type="primary", key="btn_plano"):
+            if not nome_paciente:
+                st.warning("Informe pelo menos o nome do paciente para gerar o documento.")
+            else:
+                campos_preenchidos = {
+                    "Objetivo do acompanhamento": objetivo_acompanhamento,
+                    "Orientações gerais": orientacoes_gerais,
+                    "Café da manhã": cafe_manha,
+                    "Almoço": almoco,
+                    "Lanches": lanches,
+                    "Jantar": jantar,
+                    "Ceia": ceia,
+                    "Alimentos recomendados": alimentos_recomendados,
+                    "Alimentos a evitar/restringir": alimentos_evitar,
+                    "Hidratação": hidratacao,
+                    "Suplementação": suplementacao,
+                    "Observações e próximos passos": observacoes,
+                    "Anotações adicionais": anotacoes_livres,
+                }
+                if not any(v.strip() for v in campos_preenchidos.values()):
+                    st.warning("Preencha pelo menos um campo além do nome do paciente.")
+                else:
+                    with st.spinner("Formatando plano..."):
+                        try:
+                            data_consulta_br = data_consulta.strftime("%d/%m/%Y")
+                            blocos = [f"Nome do paciente: {nome_paciente}", f"Data da consulta: {data_consulta_br}"]
+                            for titulo, valor in campos_preenchidos.items():
+                                blocos.append(f"\n{titulo}: {valor.strip() if valor.strip() else '(não preenchido)'}")
+                            prompt = "\n".join(blocos)
+                            resultado = get_gemini_response(prompt, api_key, PROMPT_PLANEJADOR)
+                            st.session_state.plano_atual = resultado
+                            st.session_state.plano_paciente_nome = nome_paciente
+                            st.session_state.plano_origem = "ia"
+                            st.session_state.contador_ia += 1
+                        except (ValueError, RuntimeError) as erro:
+                            st.error(str(erro))
 
     if st.session_state.plano_atual:
         with st.container(border=True):
-            st.markdown(st.session_state.plano_atual)
+            if st.session_state.get("plano_origem") == "arquivo":
+                # Plano colado/carregado não vem em Markdown — preserva as
+                # quebras de linha originais na tela (o .docx baixado abaixo
+                # já quebra em parágrafos corretamente de qualquer jeito).
+                st.markdown(quebras_para_exibicao(st.session_state.plano_atual))
+            else:
+                st.markdown(st.session_state.plano_atual)
 
             rodape = assinatura_rodape(
                 "Este plano reflete a orientação individual do profissional e não substitui acompanhamento clínico contínuo."

@@ -8,6 +8,11 @@ Prompts de sistema, listas de apoio e parâmetros usados em todo o app.
 # ---------------------------------------------------------------------------
 GEMINI_MODEL = "gemini-3.6-flash"
 
+# Tempo máximo de espera pela resposta da IA (em milissegundos).
+# Se o Google não responder dentro desse tempo, o app avisa na hora em vez
+# de ficar esperando indefinidamente. 30 000 ms = 30 segundos.
+TIMEOUT_IA_MS = 30_000
+
 # ---------------------------------------------------------------------------
 # Identidade do assistente
 # ---------------------------------------------------------------------------

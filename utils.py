@@ -14,6 +14,7 @@ from google.genai import types as genai_types
 
 from config import (
     GEMINI_MODEL,
+    TIMEOUT_IA_MS,
     FAIXAS_IMC,
     FATORES_ATIVIDADE,
     AJUSTE_OBJETIVO,
@@ -45,6 +46,23 @@ MENSAGEM_CONGESTIONADO = (
     "mesmo tempo). Isso costuma durar poucos minutos — tente enviar a pergunta de novo "
     "daqui a pouco."
 )
+
+MENSAGEM_TIMEOUT = (
+    "O Google demorou demais para responder (mais de 30 segundos). Isso costuma "
+    "acontecer quando o serviço está congestionado — tente de novo daqui a pouco."
+)
+
+
+def _eh_erro_de_timeout(exc: Exception) -> bool:
+    """True quando o erro é de timeout na conexão HTTP."""
+    try:
+        import httpx
+        if isinstance(exc, httpx.TimeoutException):
+            return True
+    except ImportError:
+        pass
+    texto = str(exc).lower()
+    return "timeout" in texto or "timed out" in texto
 
 
 def _com_detalhe_tecnico(mensagem_amigavel: str, detalhe_bruto: str) -> str:
@@ -132,12 +150,14 @@ def get_gemini_response(
     if not api_key:
         raise ValueError("Cole sua chave da API do Gemini na barra lateral antes de continuar.")
 
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(api_key=api_key, http_options={"timeout": TIMEOUT_IA_MS})
 
     if buscar_na_web:
         try:
             return _gerar_com_busca(client, prompt, system_instruction)
         except Exception as exc:  # noqa: BLE001 - fallback deliberado, sem busca
+            if _eh_erro_de_timeout(exc):
+                raise RuntimeError(MENSAGEM_TIMEOUT) from exc
             if _eh_erro_de_congestionamento(str(exc)):
                 # Modelo sobrecarregado: tentar de novo agora só faria o
                 # profissional esperar o dobro para receber o mesmo erro.
@@ -224,6 +244,8 @@ def _gerar_sem_busca(client, prompt: str, system_instruction: str) -> str:
     except RuntimeError:
         raise
     except Exception as exc:  # noqa: BLE001 - queremos capturar qualquer erro da API
+        if _eh_erro_de_timeout(exc):
+            raise RuntimeError(MENSAGEM_TIMEOUT) from exc
         mensagem = str(exc)
         if _eh_erro_de_congestionamento(mensagem):
             raise RuntimeError(_com_detalhe_tecnico(MENSAGEM_CONGESTIONADO, mensagem)) from exc
@@ -239,6 +261,67 @@ def _gerar_sem_busca(client, prompt: str, system_instruction: str) -> str:
         raise RuntimeError(f"Erro ao consultar o Gemini: {mensagem}") from exc
 
     return _texto_da_resposta(response)
+
+
+# ---------------------------------------------------------------------------
+# Leitura de um plano já pronto (upload de .docx/.pdf no Planejador)
+# ---------------------------------------------------------------------------
+
+def quebras_para_exibicao(texto: str) -> str:
+    """Transforma quebras de linha simples em quebras de linha 'forçadas' do
+    Markdown (dois espaços + nova linha) para exibir na tela.
+
+    Um plano colado ou extraído de um .docx/.pdf normalmente não vem em
+    Markdown (sem linhas em branco entre parágrafos) — sem este ajuste, o
+    Streamlit junta tudo num único parágrafo corrido, difícil de ler. Não
+    mexe em quebras duplas (parágrafos que já têm linha em branco entre si)."""
+    return re.sub(r"(?<!\n)\n(?!\n)", "  \n", texto)
+
+
+def extrair_texto_arquivo(arquivo) -> str:
+    """Extrai o texto de um arquivo .docx ou .pdf enviado pelo profissional
+    (objeto de upload do Streamlit) — usado quando o plano já existe pronto
+    em outro lugar, para não precisar redigitar tudo nos campos do
+    Planejador.
+
+    Só funciona com arquivos que têm texto "de verdade" (feitos no Word,
+    Google Docs etc.). PDF de documento escaneado ou foto não tem texto
+    selecionável — nesse caso, levanta um erro explicando isso, em vez de
+    devolver um texto vazio ou quebrado silenciosamente.
+    """
+    nome = (getattr(arquivo, "name", "") or "").lower()
+
+    if nome.endswith(".docx"):
+        from docx import Document as DocumentoWord
+
+        documento = DocumentoWord(arquivo)
+        partes = [p.text for p in documento.paragraphs if p.text.strip()]
+        for tabela in documento.tables:
+            for linha in tabela.rows:
+                for celula in linha.cells:
+                    if celula.text.strip():
+                        partes.append(celula.text.strip())
+        texto = "\n".join(partes)
+    elif nome.endswith(".pdf"):
+        from pypdf import PdfReader
+
+        leitor = PdfReader(arquivo)
+        partes = [(pagina.extract_text() or "") for pagina in leitor.pages]
+        texto = "\n".join(partes)
+    else:
+        raise ValueError(
+            "Formato de arquivo não suportado. Envie um arquivo .docx (Word) ou .pdf."
+        )
+
+    texto = texto.strip()
+    if not texto:
+        raise ValueError(
+            "Não encontrei texto dentro deste arquivo — ele pode ser uma imagem "
+            "escaneada ou uma foto do plano (sem texto selecionável, o app não faz "
+            "reconhecimento de texto em imagem). Copie e cole o texto do plano "
+            "diretamente no campo acima, em vez de enviar o arquivo."
+        )
+    return texto
 
 
 # ---------------------------------------------------------------------------
