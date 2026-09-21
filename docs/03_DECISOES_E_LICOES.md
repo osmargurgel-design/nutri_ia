@@ -56,6 +56,14 @@ provedor de IA, ferramenta de deploy, etc.
   de textos longos. Cores ficam em `config.py` (não espalhar hex pelo código).
 - **Nome/CRN via Secrets (17/09/2026)**: para não precisar digitar a cada
   visita, sem colocar dados pessoais no código (o repositório é público).
+- **Plano colado/carregado NÃO passa pela IA (18/09/2026)**: quando a
+  nutricionista já tem o plano pronto (colado ou de um arquivo .docx/.pdf),
+  o texto é usado exatamente como veio — decisão explícita do usuário, ao
+  responder as perguntas de escopo antes desta rodada. Evita repetir o
+  problema já registrado abaixo (texto livre + IA tentando reformatar/
+  adivinhar) e também é mais rápido/sem gastar cota. Só funciona com arquivos
+  que têm texto de verdade — sem OCR (reconhecimento de texto em imagem),
+  por ser mais complexo e arriscado em números como calorias/quantidades.
 
 ## Lições técnicas (para não repetir erro)
 

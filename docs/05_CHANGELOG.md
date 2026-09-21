@@ -5,6 +5,54 @@ e para você acompanharem o que já foi feito sem precisar reler a conversa toda
 
 ---
 
+## Rodada 11 — 2026-09-21 — Troca de modelo por congestionamento no Google
+
+- **Sintoma relatado:** o app parou de responder mesmo a perguntas simples,
+  sempre com a mensagem "modelo congestionado", tanto na Consulta técnica
+  (com e sem a busca na web ligada) quanto no Planejador.
+- **Diagnóstico:** confirmado, com dois testes (busca desligada + outra aba
+  sem busca), que o erro não era do código do app — era o próprio modelo
+  `gemini-3.6-flash` retornando "high demand" (503) direto do servidor do
+  Google. Pesquisa externa confirmou que esse mesmo erro estava sendo
+  relatado por muitos usuários da API do Gemini na mesma época, em vários
+  modelos da família Gemini 3.x.
+- **Correção aplicada:** trocado `GEMINI_MODEL` em `config.py` de
+  `gemini-3.6-flash` para `gemini-3.5-flash-lite` — um modelo mais leve, que
+  também tem suporte à busca na web (Grounding with Google Search) e tende a
+  ter mais capacidade disponível durante picos de demanda. README atualizado
+  para refletir o novo nome.
+- **Se isso voltar a acontecer:** repetir o mesmo diagnóstico (desligar a
+  busca na Consulta técnica + testar uma aba sem busca, como o Planejador);
+  se o erro continuar em ambos os casos, é congestionamento do modelo no
+  Google — trocar `GEMINI_MODEL` de novo costuma resolver ou aliviar.
+
+## Rodada 10 — 2026-09-18 — Colar ou carregar um plano já pronto no Planejador
+
+- **Novo jeito de montar o plano:** a aba Planejador agora pergunta "Como você
+  quer montar o plano desta consulta?" com duas opções — "Preencher o
+  formulário" (o jeito de sempre, campo a campo) ou **"Colar ou carregar um
+  plano já pronto"** (novo). Isso evita redigitar um plano que a nutricionista
+  já tem pronto em outro lugar.
+- **Colar o texto:** um campo simples para colar o plano já pronto.
+- **Carregar arquivo:** também dá para enviar o arquivo direto (.docx do Word
+  ou .pdf), desde que o texto seja "de verdade" (documento digitado, não
+  escaneado/foto — isso não tem como ler sem reconhecimento de texto em
+  imagem, que o app não faz; se o arquivo não tiver texto de verdade dentro,
+  aparece um aviso explicando e pedindo para colar o texto).
+- **Sem usar a IA:** o plano colado/carregado é usado exatamente como está,
+  sem nenhuma reescrita — mais rápido, sem gastar cota da IA, e sem risco de
+  a IA reinterpretar algo errado do plano.
+- Assim que usado, o plano já fica disponível para a Lista de Compras e os
+  Folhetos Educativos (com o preenchimento automático de nome que já existia
+  desde a Rodada 9) e pode ser baixado em `.docx`, igual a um plano gerado
+  pelo formulário.
+- Corrigido, durante os testes: o texto colado/carregado aparecia "grudado"
+  num parágrafo só na pré-visualização da tela (o `.docx` baixado já saía
+  certo, quebrado em parágrafos) — agora a quebra de linha original aparece
+  certinha na tela também.
+- Nova biblioteca adicionada ao projeto: `pypdf` (leitura de texto de PDF) —
+  gratuita, mesmo padrão das outras bibliotecas já usadas no app.
+
 ## Rodada 9 — 2026-09-18 — Preenchimento automático de nomes + Calculadora independente
 
 - **Nome do paciente preenchido automaticamente:** ao gerar um plano no

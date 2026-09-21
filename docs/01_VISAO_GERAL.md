@@ -44,7 +44,11 @@ paciente/plano, ficam juntas no começo.
    profissional preenche campo por campo (objetivo, refeições, alimentos
    recomendados/evitar, hidratação, suplementação, observações). A IA só
    reformata/organiza em linguagem para o paciente — não inventa conteúdo
-   clínico. Gera um `.docx` com o nome do paciente no título.
+   clínico. Gera um `.docx` com o nome do paciente no título. **Alternativa
+   (desde 18/09/2026):** se o plano já está pronto em outro lugar, dá para
+   colar o texto ou enviar o arquivo (.docx/.pdf com texto selecionável) em
+   vez de preencher o formulário — nesse caso o plano é usado exatamente como
+   está, sem passar pela IA.
 3. **🛒 Lista de compras** — a partir de um plano (gerado no Planejador ou colado
    manualmente), gera lista de compras por categoria, substituições inteligentes
    e uma versão simples para o paciente. Baixa em `.docx`. Quando usa o plano do
