@@ -1,0 +1,122 @@
+# Visão Geral — Nutri IA
+
+## O que é
+
+O **Nutri IA** é um aplicativo web (feito em Streamlit, usando a API do Gemini do
+Google) criado para apoiar o trabalho do dia a dia de um(a) nutricionista. Foi
+inspirado no app "Professor IA" que o usuário já tinha para outra área.
+
+Hoje o app é usado, no momento, **só pela sobrinha do usuário**, que é
+nutricionista — está em fase de testes e melhorias antes de eventualmente ser
+liberado para mais pessoas.
+
+## Para quem é
+
+O app fala com o **profissional de nutrição**, não diretamente com o paciente.
+Ou seja, a linguagem das respostas de IA na aba de consulta técnica pode (e deve)
+usar termos técnicos — só os documentos gerados para entregar ao paciente (plano,
+lista de compras, folheto) usam linguagem simples.
+
+**Direção de produto (anotada em 01/10/2026):** o usuário quer que o app ajude
+também **nutricionistas jovens, que estão começando a carreira**. Além do
+atendimento, isso inclui: (1) apoio para **captar pacientes/clientes** com
+conteúdo para redes sociais (Instagram e LinkedIn, com banco de temas de
+posts) — **próxima etapa, ainda não implementada**; e (2) informação sobre
+**concursos públicos** para nutricionista no mês e no ano — **já entregue**
+(aba Concursos, Rodada 11). O plano está em
+`claude/08_PLANO_JOVENS_PROFISSIONAIS_REDES_E_CONCURSOS.md` e os itens no
+`04_PROXIMOS_PASSOS.md`.
+
+## Onde está publicado
+
+- **Código-fonte:** repositório `nutri_ia` no GitHub do usuário (conta
+  `osmargurgel-design`), público.
+- **App publicado:** Streamlit Community Cloud, link
+  `https://nutri-ia-gabi.streamlit.app`
+- **Chave da API do Gemini:** configurada automaticamente via "Secrets" do
+  Streamlit Cloud (o app detecta sozinho — a nutricionista não precisa colar
+  chave nenhuma no dia a dia).
+- **Nome e CRN da nutricionista:** podem ficar nos mesmos Secrets
+  (`NOME_NUTRICIONISTA` e `CRN_NUTRICIONISTA`) para já abrirem preenchidos.
+
+## As 6 funcionalidades (abas do app)
+
+Ordem das abas: as que trabalham em sequência com o mesmo paciente/plano ficam
+juntas no começo (Consulta técnica, Planejador, Lista de compras, Folhetos); as
+abas independentes (Calculadora e Concursos) ficam no final e não compartilham
+dados de paciente com as outras.
+
+1. **💬 Consulta técnica** — chat com IA para tirar dúvidas técnicas rápidas
+   durante o atendimento. **Sem busca na web:** o plano gratuito do Gemini não a
+   inclui (confirmado em 01/10/2026), então a aba responde direto, com o
+   conhecimento do modelo, e mostra uma nota explicando isso e uma linha no fim
+   de cada resposta pedindo para conferir as fontes (Guia Alimentar, Ministério
+   da Saúde, OMS, SciELO, PubMed). A conversa aparece num cartão que cresce com
+   o texto (sem rolagem interna; só a página rola). A busca com fontes está
+   pronta no código, desligada (`BUSCA_WEB_DISPONIVEL = False` em `app.py`),
+   para quando existir busca na web no plano usado.
+2. **📋 Planejador** — formulário estruturado (não é mais texto livre) onde o
+   profissional preenche campo por campo (objetivo, refeições, alimentos
+   recomendados/evitar, hidratação, suplementação, observações). A IA só
+   reformata/organiza em linguagem para o paciente — não inventa conteúdo
+   clínico. Gera um `.docx` com o nome do paciente no título. **Alternativa
+   (desde 18/09/2026):** se o plano já está pronto em outro lugar, dá para
+   colar o texto ou enviar o arquivo (.docx/.pdf com texto selecionável) em
+   vez de preencher o formulário — nesse caso o plano é usado exatamente como
+   está, sem passar pela IA.
+3. **🛒 Lista de compras** — a partir de um plano (gerado no Planejador ou colado
+   manualmente), gera lista de compras por categoria, substituições inteligentes
+   e uma versão simples para o paciente. Baixa em `.docx`. Quando usa o plano do
+   Planejador, o nome do paciente já vem preenchido automaticamente.
+4. **📄 Folhetos educativos** — a partir de um plano + um tema escolhido pelo
+   profissional, gera um folheto educativo pronto para entregar ao paciente.
+   Baixa em `.pdf`. Nome do paciente (novo campo) e nome/CRN do nutricionista
+   também vêm preenchidos automaticamente quando possível.
+5. **🧮 Calculadora** — calcula IMC, TMB (Mifflin-St Jeor ou Harris-Benedict), GET
+   e faixa calórica por objetivo. Permite baixar os resultados em `.docx`.
+   **Independente das outras abas** — não compartilha nome de paciente nem
+   plano com elas (aviso disso aparece na própria tela).
+6. **🏛️ Concursos** (desde 01/10/2026, Rodada 11) — ajuda a encontrar concursos
+   públicos e residências para nutricionista. O profissional escolhe Brasil todo
+   ou um estado, o mês e (opcional) residências; o app monta **buscas prontas**
+   (links do Google já filtrados: inscrições abertas agora, notícias, panorama do
+   ano, portal PCI Concursos, Diário Oficial) e lista portais oficiais. O mês é
+   preenchido sozinho e um mês que já passou vira o ano seguinte; toda busca
+   leva filtro de data (não traz páginas de anos anteriores). **Não usa a IA e
+   não gasta cota.** A versão com lista gerada por IA está pronta no código,
+   desligada (`BUSCA_IA_ATIVA = False` em `concursos.py`), até existir busca na
+   web no plano usado. Independente das outras abas.
+
+**Abas planejadas (ainda não existem):** Agenda (dentro do app) e Redes Sociais
+(Instagram/LinkedIn). Ver `04_PROXIMOS_PASSOS.md`.
+
+## Arquivos do código
+
+`app.py` (telas), `config.py` (prompts, cores, modelo), `utils.py` (IA,
+cálculos, geração de documentos), `concursos.py` (aba Concursos) e
+`requirements.txt`. No projeto do Claude, a cópia de `concursos.py` fica em
+`claude/concursos.py`; no GitHub ele fica na raiz, junto com `app.py`.
+
+## Estilo visual
+
+Paleta **"Verde sálvia clínico"** (escolhida em 17/09/2026): fundo da página
+menta bem claro (`#EEF6F3`) com cartões e campos brancos, botões/abas em verde
+`#2E8B7A`, barra lateral escura verde-petróleo (`#0F3D3E`) com o nome/CRN do
+nutricionista em destaque. Os documentos Word/PDF seguem as mesmas cores
+(títulos verdes, nome + CRN no cabeçalho). Cores centralizadas em `config.py`.
+
+## Estado atual (resumo rápido)
+
+✅ App funcionando em produção, testado pela sobrinha
+✅ Deploy automático: toda vez que o usuário sobe mudança pro GitHub, o Streamlit
+Cloud atualiza sozinho
+✅ Chave de API automática (não exposta, via Secrets)
+✅ Contador de uso da IA na sessão (sem expor link da chave)
+✅ Visual com paleta clínica e documentos com identidade visual
+✅ Aba Concursos com buscas prontas (gratuita)
+✅ Consulta técnica com área de leitura grande e sem opção que não funciona
+⚠️ Busca na web com IA indisponível no plano gratuito do Gemini (funções que
+dependem dela estão desligadas por interruptor interno)
+
+Veja `04_PROXIMOS_PASSOS.md` para o que ainda falta / ideias futuras, e
+`05_CHANGELOG.md` para o histórico rodada a rodada.

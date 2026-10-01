@@ -377,6 +377,10 @@ with tab_consulta:
 
     pergunta = st.chat_input("💬 Digite sua dúvida técnica e aperte Enter...")
     if pergunta:
+        # Guarda o histórico ANTES de incluir esta pergunta nova — ele é
+        # enviado à parte (parâmetro historico), para o Gemini ver a
+        # conversa inteira e responder como continuação, não do zero.
+        historico_para_ia = list(st.session_state.historico_consulta)
         st.session_state.historico_consulta.append(("user", pergunta))
         with janela_chat:
             with st.chat_message("user"):
@@ -397,6 +401,7 @@ with tab_consulta:
                             PROMPT_CONSULTA,
                             buscar_na_web=tentar_busca,
                             ao_falhar_busca=marcar_busca_indisponivel,
+                            historico=historico_para_ia,
                         )
                         if not tentar_busca:
                             # Aviso curto: o texto longo só aparece na primeira

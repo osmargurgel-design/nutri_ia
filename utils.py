@@ -101,12 +101,38 @@ def _texto_da_resposta(response) -> str:
     )
 
 
+# Quantas mensagens anteriores (perguntas + respostas somadas) são enviadas
+# junto de uma nova pergunta, quando há histórico de conversa. Limita o
+# tamanho/custo de cada chamada mesmo em conversas bem longas.
+MAX_HISTORICO_ENVIADO = 20
+
+
+def _montar_contents(prompt: str, historico: list | None):
+    """Monta o conteúdo enviado ao Gemini. Sem histórico (ou módulos que não
+    usam conversa contínua, como Planejador/Lista/Folheto), mantém o
+    comportamento de sempre: manda só o texto do prompt. Com histórico
+    (Consulta técnica), monta a lista de turnos anteriores (profissional e
+    IA) + a pergunta atual, para o Gemini responder como continuação real da
+    mesma conversa em vez de tratar cada pergunta como uma conversa nova."""
+    if not historico:
+        return prompt
+
+    turnos = historico[-MAX_HISTORICO_ENVIADO:]
+    contents = []
+    for autor, mensagem in turnos:
+        role = "user" if autor == "user" else "model"
+        contents.append(genai_types.Content(role=role, parts=[genai_types.Part(text=mensagem)]))
+    contents.append(genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)]))
+    return contents
+
+
 def get_gemini_response(
     prompt: str,
     api_key: str,
     system_instruction: str,
     buscar_na_web: bool = False,
     ao_falhar_busca=None,
+    historico: list | None = None,
 ) -> str:
     """Envia um prompt ao Gemini com a instrução de sistema do módulo atual.
 
@@ -125,6 +151,12 @@ def get_gemini_response(
     funcionou. A tela usa isso para não insistir na busca nas próximas
     perguntas da mesma sessão (o que deixaria cada resposta mais lenta à toa).
 
+    `historico` é opcional: uma lista de tuplas (autor, mensagem) com as
+    mensagens anteriores da mesma conversa (autor "user" ou "assistant"), sem
+    incluir a pergunta atual. Quando informado, essas mensagens são enviadas
+    junto ao Gemini para a resposta considerar o que já foi dito antes. Quando
+    omitido (padrão), o comportamento é o de sempre — só a pergunta atual.
+
     Levanta uma exceção com mensagem amigável em português caso a chamada falhe
     (chave inválida, limite de uso atingido, etc.) para que a interface possa
     exibir o erro de forma clara ao nutricionista.
@@ -136,7 +168,7 @@ def get_gemini_response(
 
     if buscar_na_web:
         try:
-            return _gerar_com_busca(client, prompt, system_instruction)
+            return _gerar_com_busca(client, prompt, system_instruction, historico)
         except Exception as exc:  # noqa: BLE001 - fallback deliberado, sem busca
             if _eh_erro_de_congestionamento(str(exc)):
                 # Modelo sobrecarregado: tentar de novo agora só faria o
@@ -168,19 +200,19 @@ def get_gemini_response(
                 "[SciELO](https://www.scielo.org) e "
                 "[PubMed](https://pubmed.ncbi.nlm.nih.gov) — todas de acesso livre._"
             )
-            texto = _gerar_sem_busca(client, prompt, system_instruction)
+            texto = _gerar_sem_busca(client, prompt, system_instruction, historico)
             return texto + aviso
 
-    return _gerar_sem_busca(client, prompt, system_instruction)
+    return _gerar_sem_busca(client, prompt, system_instruction, historico)
 
 
-def _gerar_com_busca(client, prompt: str, system_instruction: str) -> str:
+def _gerar_com_busca(client, prompt: str, system_instruction: str, historico: list | None = None) -> str:
     """Chama o Gemini com Grounding with Google Search ativado e anexa as
     fontes usadas ao final da resposta."""
     grounding_tool = genai_types.Tool(google_search=genai_types.GoogleSearch())
     response = client.models.generate_content(
         model=GEMINI_MODEL,
-        contents=prompt,
+        contents=_montar_contents(prompt, historico),
         config=genai_types.GenerateContentConfig(
             system_instruction=system_instruction,
             tools=[grounding_tool],
@@ -212,11 +244,11 @@ def _gerar_com_busca(client, prompt: str, system_instruction: str) -> str:
     return texto
 
 
-def _gerar_sem_busca(client, prompt: str, system_instruction: str) -> str:
+def _gerar_sem_busca(client, prompt: str, system_instruction: str, historico: list | None = None) -> str:
     try:
         response = client.models.generate_content(
             model=GEMINI_MODEL,
-            contents=prompt,
+            contents=_montar_contents(prompt, historico),
             config=genai_types.GenerateContentConfig(
                 system_instruction=system_instruction,
             ),
