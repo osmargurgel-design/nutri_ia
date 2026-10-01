@@ -360,17 +360,16 @@ with tab_consulta:
                 st.session_state.historico_consulta = []
                 st.rerun()
 
-    # Janela com altura máxima: cresce junto com a conversa (poucas mensagens
-    # ficam compactas, sem área vazia) e só passa a rolar internamente depois
-    # de preencher o espaço — sem pesar a página nem perder o scroll automático.
+    # Janela de leitura: sem altura fixa. O cartão cresce junto com o texto, então
+    # uma resposta longa aparece inteira e quem rola é a própria página (antes
+    # havia um teto de 480px com rolagem interna, ruim para textos longos).
     qtd_mensagens = len(st.session_state.historico_consulta)
     if qtd_mensagens == 0:
         janela_chat = st.container()
         with janela_chat:
             st.caption("💬 Sua conversa vai aparecer aqui. Digite sua dúvida abaixo para começar.")
     else:
-        altura_chat = min(480, max(160, qtd_mensagens * 110))
-        janela_chat = st.container(height=altura_chat)
+        janela_chat = st.container(border=True)
         with janela_chat:
             for autor, mensagem in st.session_state.historico_consulta:
                 with st.chat_message(autor):
