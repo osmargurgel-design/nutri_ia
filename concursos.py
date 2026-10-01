@@ -18,7 +18,7 @@ CONFIÁVEL. Por isso, na busca com IA:
   escreveria no texto, que poderiam ser inventados).
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote_plus
 
 import streamlit as st
@@ -224,24 +224,59 @@ MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "a
          "setembro", "outubro", "novembro", "dezembro"]
 
 
-def _link_google(consulta: str, ultimo_mes: bool = False, noticias: bool = False) -> str:
+def calcular_ano_ref(indice_mes: int, hoje: datetime) -> int:
+    """Ano a que o mês escolhido se refere: mês que já passou neste ano
+    (ex.: janeiro, estando em outubro) significa o PRÓXIMO ano."""
+    return hoje.year if indice_mes >= hoje.month else hoje.year + 1
+
+
+def _fmt_data_google(d: datetime) -> str:
+    return f"{d.month}/{d.day}/{d.year}"  # formato M/D/AAAA que o Google exige
+
+
+def _link_google(consulta: str, desde: datetime = None, ultimo_mes: bool = False,
+                 noticias: bool = False) -> str:
+    """Link de busca no Google. `desde` filtra por DATA DE PUBLICAÇÃO (só
+    resultados publicados a partir dessa data) — é o que impede páginas
+    antigas (anos anteriores) de aparecerem."""
     url = "https://www.google.com/search?q=" + quote_plus(consulta)
     if ultimo_mes:
         url += "&tbs=qdr:m"  # só resultados do último mês
+    elif desde is not None:
+        url += f"&tbs=cdr:1,cd_min:{_fmt_data_google(desde)}"
     if noticias:
         url += "&tbm=nws"  # aba Notícias
     return url
 
 
-def montar_buscas(estado: str, mes: str, ano: int, incluir_residencias: bool) -> list:
+def montar_buscas(estado: str, mes: str, ano: int, incluir_residencias: bool,
+                  hoje: datetime = None) -> list:
     """Monta buscas prontas (título, explicação, link). Não usa IA nem cota:
-    cada link abre uma busca já filtrada, sempre com resultados do momento."""
+    cada link abre uma busca já filtrada, sempre com resultados do momento.
+
+    Filtro de data automático (para nunca trazer páginas de anos anteriores):
+    - mês atual: só publicações do último mês;
+    - outro mês: só publicações dos últimos 90 dias;
+    - panorama do ano atual: só publicações desde 1º de janeiro deste ano;
+      de ano que vem: últimos 180 dias;
+    - portais e Diário Oficial: últimos 180 dias.
+    """
+    hoje = hoje or _agora_brasil()
+    mes_atual = MESES.index(mes) + 1 == hoje.month and ano == hoje.year
     onde = "" if estado == "Brasil todo" else f" {NOMES_ESTADOS.get(estado, estado)}"
+
+    ha_90 = hoje - timedelta(days=90)
+    ha_180 = hoje - timedelta(days=180)
+    inicio_panorama = datetime(hoje.year, 1, 1) if ano == hoje.year else ha_180
+
     buscas = [
         (
             "✅ Inscrições abertas agora",
-            f"Concursos de nutricionista com inscrição aberta em {mes} de {ano} (último mês).",
-            _link_google(f'concurso nutricionista "inscrições abertas" {mes} {ano}{onde}', ultimo_mes=True),
+            f"Concursos de nutricionista com inscrição aberta em {mes} de {ano}.",
+            _link_google(
+                f'concurso nutricionista "inscrições abertas" {mes} {ano}{onde}',
+                desde=ha_90, ultimo_mes=mes_atual,
+            ),
         ),
         (
             "📰 Notícias de concursos de nutrição",
@@ -251,17 +286,17 @@ def montar_buscas(estado: str, mes: str, ano: int, incluir_residencias: bool) ->
         (
             f"📅 Panorama de {ano}",
             f"Concursos previstos, abertos e encerrados em {ano}.",
-            _link_google(f"concursos nutricionista {ano}{onde} edital"),
+            _link_google(f"concursos nutricionista {ano}{onde} edital", desde=inicio_panorama),
         ),
         (
             "🔎 No portal PCI Concursos",
             "Resultados do portal que reúne concursos (confira sempre no edital oficial).",
-            _link_google(f"site:pciconcursos.com.br nutricionista{onde}"),
+            _link_google(f"site:pciconcursos.com.br nutricionista{onde}", desde=ha_180),
         ),
         (
             "🏛️ Editais no Diário Oficial da União",
             "Editais federais publicados oficialmente.",
-            _link_google("site:in.gov.br edital concurso nutricionista"),
+            _link_google("site:in.gov.br edital concurso nutricionista", desde=ha_180),
         ),
     ]
     if incluir_residencias:
@@ -269,7 +304,7 @@ def montar_buscas(estado: str, mes: str, ano: int, incluir_residencias: bool) ->
             (
                 "🩺 Residência multiprofissional (nutrição)",
                 f"Processos seletivos de residência em saúde com vaga para nutrição em {ano}.",
-                _link_google(f"residência multiprofissional nutrição edital {ano}{onde}"),
+                _link_google(f"residência multiprofissional nutrição edital {ano}{onde}", desde=ha_180),
             )
         )
     return buscas
@@ -340,6 +375,8 @@ def render_aba_concursos(api_key: str) -> None:
     )
 
     col_estado, col_mes, col_resid = st.columns([2, 2, 3])
+    # Mês escolhido já passado neste ano (ex.: janeiro, estando em outubro)
+    # significa o PRÓXIMO ano — por isso o ano é calculado, não fixo.
     with col_estado:
         estado = st.selectbox("Abrangência", ESTADOS, key="concursos_estado")
     with col_mes:
@@ -350,9 +387,14 @@ def render_aba_concursos(api_key: str) -> None:
             key="concursos_residencias",
         )
 
+    indice_mes = MESES.index(mes) + 1
+    ano_ref = calcular_ano_ref(indice_mes, agora)
     with st.container(border=True):
-        st.markdown(f"**Buscas prontas — {mes} de {agora.year}**")
-        for titulo, descricao, url in montar_buscas(estado, mes, agora.year, incluir_residencias):
+        st.markdown(f"**Buscas prontas — {mes} de {ano_ref}**")
+        if ano_ref != agora.year:
+            st.caption(f"Como {mes} já passou em {agora.year}, as buscas são para {mes} de {ano_ref}.")
+        buscas = montar_buscas(estado, mes, ano_ref, incluir_residencias, hoje=agora)
+        for titulo, descricao, url in buscas:
             st.markdown(f"- [{titulo}]({url}) — {descricao}")
         st.caption(
             "Dica: ao abrir um concurso, confira no edital o período de inscrição, a taxa, "
