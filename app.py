@@ -8,6 +8,8 @@ Módulos:
 4. Folhetos educativos — material em PDF para o paciente, a partir de um plano
 5. Calculadora         — IMC, TMB, GET e faixa calórica por objetivo (independente
                           das demais abas — não compartilha paciente/plano com elas)
+6. Concursos           — concursos públicos para nutricionista (mês e ano), com fontes
+                          (independente das demais abas; código em concursos.py)
 """
 
 import streamlit as st
@@ -40,6 +42,7 @@ from utils import (
     extrair_texto_arquivo,
     quebras_para_exibicao,
 )
+from concursos import render_aba_concursos
 
 st.set_page_config(page_title=NOME_APP, page_icon="🩺", layout="wide")
 
@@ -285,13 +288,14 @@ if "historico_consulta" not in st.session_state:
 if "plano_atual" not in st.session_state:
     st.session_state.plano_atual = ""
 
-tab_consulta, tab_plano, tab_lista, tab_folheto, tab_calc = st.tabs(
+tab_consulta, tab_plano, tab_lista, tab_folheto, tab_calc, tab_concursos = st.tabs(
     [
         "💬 Consulta técnica",
         "📋 Planejador",
         "🛒 Lista de compras",
         "📄 Folhetos educativos",
         "🧮 Calculadora",
+        "🏛️ Concursos",
     ]
 )
 
@@ -825,3 +829,9 @@ with tab_calc:
                 file_name=nome_arquivo("calculos", nome_paciente_calc or "paciente", "docx"),
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
+
+# ---------------------------------------------------------------------------
+# Aba 6 — Concursos (independente das demais; código em concursos.py)
+# ---------------------------------------------------------------------------
+with tab_concursos:
+    render_aba_concursos(api_key)
