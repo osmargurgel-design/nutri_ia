@@ -44,6 +44,13 @@ from utils import (
 )
 from concursos import render_aba_concursos
 
+# Interruptor interno: o plano GRATUITO do Gemini não inclui busca na web
+# (confirmado em 01/10/2026). Enquanto estiver False, a Consulta técnica não
+# mostra a chavinha de busca nem promete fontes — responde direto, o que
+# também é mais rápido (sem uma tentativa de busca que sempre falharia).
+# Trocar para True quando o app usar uma API com busca na web liberada.
+BUSCA_WEB_DISPONIVEL = False
+
 st.set_page_config(page_title=NOME_APP, page_icon="🩺", layout="wide")
 
 # ---------------------------------------------------------------------------
@@ -308,34 +315,43 @@ with tab_consulta:
         "Interações fármaco-nutriente, bases fisiológicas, comparação de abordagens "
         "dietéticas e embasamento científico para uma orientação."
     )
-    st.caption(
-        "🔎 Este módulo busca em fontes confiáveis na web (OMS, Ministério da Saúde, "
-        "sociedades de nutrição, periódicos científicos) e lista as fontes usadas ao "
-        "final de cada resposta."
-    )
-
-    if "busca_indisponivel" not in st.session_state:
-        st.session_state.busca_indisponivel = False
-
-    col_busca, col_aviso = st.columns([2, 3])
-    with col_busca:
-        usar_busca = st.toggle(
-            "🔎 Buscar em fontes na web",
-            value=True,
-            key="usar_busca_web",
-            help=(
-                "Ligada, a IA procura em sites confiáveis antes de responder e lista as "
-                "fontes — leva alguns segundos a mais. Desligada, a resposta sai mais "
-                "rápida, com o conhecimento do modelo."
-            ),
+    if BUSCA_WEB_DISPONIVEL:
+        st.caption(
+            "🔎 Este módulo busca em fontes confiáveis na web (OMS, Ministério da Saúde, "
+            "sociedades de nutrição, periódicos científicos) e lista as fontes usadas ao "
+            "final de cada resposta."
         )
-    if st.session_state.busca_indisponivel and usar_busca:
-        with col_aviso:
-            st.caption(
-                "⏳ A busca na web não respondeu nesta sessão (limite ou indisponível), "
-                "então as próximas perguntas vão direto para a IA — mais rápido. "
-                "Recarregue a página para tentar a busca de novo."
+
+        if "busca_indisponivel" not in st.session_state:
+            st.session_state.busca_indisponivel = False
+
+        col_busca, col_aviso = st.columns([2, 3])
+        with col_busca:
+            usar_busca = st.toggle(
+                "🔎 Buscar em fontes na web",
+                value=True,
+                key="usar_busca_web",
+                help=(
+                    "Ligada, a IA procura em sites confiáveis antes de responder e lista as "
+                    "fontes — leva alguns segundos a mais. Desligada, a resposta sai mais "
+                    "rápida, com o conhecimento do modelo."
+                ),
             )
+        if st.session_state.busca_indisponivel and usar_busca:
+            with col_aviso:
+                st.caption(
+                    "⏳ A busca na web não respondeu nesta sessão (limite ou indisponível), "
+                    "então as próximas perguntas vão direto para a IA — mais rápido. "
+                    "Recarregue a página para tentar a busca de novo."
+                )
+    else:
+        usar_busca = False
+        st.caption(
+            "ℹ️ O Nutri IA usa a versão gratuita da IA do Google, que não inclui busca "
+            "na web. As respostas vêm do conhecimento do modelo, sem lista de fontes — "
+            "confira em fontes confiáveis (Guia Alimentar, Ministério da Saúde, OMS, "
+            "SciELO, PubMed) antes de aplicar clinicamente."
+        )
 
     if st.session_state.historico_consulta:
         col_limpar, _ = st.columns([1, 4])
