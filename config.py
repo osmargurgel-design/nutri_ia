@@ -6,7 +6,11 @@ Prompts de sistema, listas de apoio e parâmetros usados em todo o app.
 # ---------------------------------------------------------------------------
 # Modelo Gemini
 # ---------------------------------------------------------------------------
-GEMINI_MODEL = "gemini-3.6-flash"
+# ATENÇÃO: em 21/09/2026 o gemini-3.6-flash ficou congestionado (erro 503,
+# app lento/sem resposta) e a troca para gemini-3.5-flash-lite resolveu.
+# Essa troca não tinha sido salva nos arquivos do Projeto no Claude e foi
+# desfeita sem querer em 01/10/2026 — não voltar para o 3.6-flash sem testar.
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 # ---------------------------------------------------------------------------
 # Identidade do assistente

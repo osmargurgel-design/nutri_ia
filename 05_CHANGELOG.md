@@ -5,6 +5,23 @@ e para você acompanharem o que já foi feito sem precisar reler a conversa toda
 
 ---
 
+## Rodada 13 — 2026-10-01 — Chat com memória da conversa + modelo estável restaurado
+
+- **Consulta técnica lembra da conversa:** as mensagens anteriores da sessão
+  vão junto da nova pergunta, escritas no mesmo texto simples de sempre (sem
+  mudar o formato de envio). Na primeira pergunta, o texto enviado é idêntico
+  ao de antes. A IA só cumprimenta na primeira mensagem e pergunta se há mais
+  dúvidas quando o assunto parece encerrado.
+- **Modelo restaurado para `gemini-3.5-flash-lite`:** a troca feita em 21/09
+  (que resolveu a lentidão/congestionamento do `gemini-3.6-flash`) não estava
+  salva nos arquivos do Projeto e foi desfeita sem querer nesta rodada.
+- **O que NÃO deu certo no meio do caminho:** enviar o histórico como vários
+  turnos separados (formato multi-turno do Gemini) gerou erro
+  `MALFORMED_FUNCTION_CALL`. Voltamos ao envio em texto único.
+- **Lição:** depois de cada correção entregue, atualizar também os arquivos do
+  Projeto no Claude (`config.py`, `utils.py`, `app.py`, docs) — senão a
+  próxima entrega parte de uma versão desatualizada e desfaz a correção.
+
 ## Rodada 12 — 2026-10-01 — Consulta técnica: sem chavinha que não funciona + área de leitura maior
 
 Aplica a regra do usuário "nada na tela que não funcione" (ver
