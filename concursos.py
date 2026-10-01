@@ -1,8 +1,15 @@
 """
 Aba Concursos — concursos públicos e processos seletivos para nutricionista.
 
+IMPORTANTE (descoberto em 01/10/2026): o plano GRATUITO do Gemini não inclui
+busca na web (Grounding with Google Search aparece como "Not available" na
+página oficial de preços). Por isso a aba funciona, por padrão, com BUSCAS
+PRONTAS (links de busca já filtrados, gratuitos e sempre atuais). A busca com
+IA continua no código como opção avançada: só funciona se a conta Google do
+usuário tiver cobrança ativada.
+
 Regra central (decisão do usuário, 01/10/2026): a informação precisa ser
-CONFIÁVEL. Por isso:
+CONFIÁVEL. Por isso, na busca com IA:
 - a lista só aparece se a busca na web do Gemini devolver fontes reais; sem
   fontes, o app NÃO mostra uma lista gerada só pelo conhecimento do modelo
   (ele não sabe o que está aberto hoje) e mostra links de portais oficiais;
@@ -12,6 +19,7 @@ CONFIÁVEL. Por isso:
 """
 
 from datetime import datetime
+from urllib.parse import quote_plus
 
 import streamlit as st
 from google import genai
@@ -163,8 +171,12 @@ def buscar_concursos(api_key: str, estado: str, incluir_residencias: bool) -> di
             raise RuntimeError(_com_detalhe_tecnico(MENSAGEM_CONGESTIONADO, mensagem)) from exc
         if _eh_erro_de_limite(mensagem):
             raise RuntimeError(
-                "A cota da busca na web acabou por enquanto (ela tem limite próprio e é "
-                "renovada com o tempo). Tente de novo mais tarde."
+                _com_detalhe_tecnico(
+                    "O Google não liberou a busca na web para esta chave. No plano gratuito do "
+                    "Gemini a busca na web não está incluída (só em contas com cobrança "
+                    "ativada). Use as buscas prontas acima, que são gratuitas.",
+                    mensagem,
+                )
             ) from exc
         if "API key" in mensagem or "API_KEY_INVALID" in mensagem:
             raise RuntimeError("Chave da API inválida. Confira a chave colada na barra lateral.") from exc
@@ -192,6 +204,71 @@ def buscar_concursos(api_key: str, estado: str, incluir_residencias: bool) -> di
     }
 
 
+NOMES_ESTADOS = {
+    "AC": "Acre", "AL": "Alagoas", "AP": "Amapá", "AM": "Amazonas", "BA": "Bahia",
+    "CE": "Ceará", "DF": "Distrito Federal", "ES": "Espírito Santo", "GO": "Goiás",
+    "MA": "Maranhão", "MT": "Mato Grosso", "MS": "Mato Grosso do Sul", "MG": "Minas Gerais",
+    "PA": "Pará", "PB": "Paraíba", "PR": "Paraná", "PE": "Pernambuco", "PI": "Piauí",
+    "RJ": "Rio de Janeiro", "RN": "Rio Grande do Norte", "RS": "Rio Grande do Sul",
+    "RO": "Rondônia", "RR": "Roraima", "SC": "Santa Catarina", "SP": "São Paulo",
+    "SE": "Sergipe", "TO": "Tocantins",
+}
+
+MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
+         "setembro", "outubro", "novembro", "dezembro"]
+
+
+def _link_google(consulta: str, ultimo_mes: bool = False, noticias: bool = False) -> str:
+    url = "https://www.google.com/search?q=" + quote_plus(consulta)
+    if ultimo_mes:
+        url += "&tbs=qdr:m"  # só resultados do último mês
+    if noticias:
+        url += "&tbm=nws"  # aba Notícias
+    return url
+
+
+def montar_buscas(estado: str, mes: str, ano: int, incluir_residencias: bool) -> list:
+    """Monta buscas prontas (título, explicação, link). Não usa IA nem cota:
+    cada link abre uma busca já filtrada, sempre com resultados do momento."""
+    onde = "" if estado == "Brasil todo" else f" {NOMES_ESTADOS.get(estado, estado)}"
+    buscas = [
+        (
+            "✅ Inscrições abertas agora",
+            f"Concursos de nutricionista com inscrição aberta em {mes} de {ano} (último mês).",
+            _link_google(f'concurso nutricionista "inscrições abertas" {mes} {ano}{onde}', ultimo_mes=True),
+        ),
+        (
+            "📰 Notícias de concursos de nutrição",
+            "Notícias recentes sobre editais e abertura de inscrições.",
+            _link_google(f"concurso nutricionista edital{onde}", ultimo_mes=True, noticias=True),
+        ),
+        (
+            f"📅 Panorama de {ano}",
+            f"Concursos previstos, abertos e encerrados em {ano}.",
+            _link_google(f"concursos nutricionista {ano}{onde} edital"),
+        ),
+        (
+            "🔎 No portal PCI Concursos",
+            "Resultados do portal que reúne concursos (confira sempre no edital oficial).",
+            _link_google(f"site:pciconcursos.com.br nutricionista{onde}"),
+        ),
+        (
+            "🏛️ Editais no Diário Oficial da União",
+            "Editais federais publicados oficialmente.",
+            _link_google("site:in.gov.br edital concurso nutricionista"),
+        ),
+    ]
+    if incluir_residencias:
+        buscas.append(
+            (
+                "🩺 Residência multiprofissional (nutrição)",
+                f"Processos seletivos de residência em saúde com vaga para nutrição em {ano}.",
+                _link_google(f"residência multiprofissional nutrição edital {ano}{onde}"),
+            )
+        )
+    return buscas
+
+
 def _mostrar_fontes_confiaveis(aberto: bool) -> None:
     with st.expander("🔗 Onde conferir direto nos portais oficiais", expanded=aberto):
         for nome, url, descricao in FONTES_CONFIAVEIS:
@@ -202,50 +279,31 @@ def _mostrar_fontes_confiaveis(aberto: bool) -> None:
         )
 
 
-def render_aba_concursos(api_key: str) -> None:
-    """Desenha a aba Concursos (chamada pelo app.py dentro da aba)."""
-    st.subheader("Concursos públicos para nutricionista")
-    st.caption(
-        "Útil para quem está começando a carreira: veja o que está com inscrição aberta "
-        "agora e o panorama do ano, com a fonte de cada informação."
-    )
-    st.info(
-        "ℹ️ Esta aba é independente das outras (não usa dados de paciente). "
-        "A lista vem de uma busca na web feita na hora e **sempre deve ser conferida no "
-        "edital oficial** antes de se inscrever."
-    )
-
-    col_estado, col_resid = st.columns([2, 3])
-    with col_estado:
-        estado = st.selectbox("Abrangência", ESTADOS, key="concursos_estado")
-    with col_resid:
-        incluir_residencias = st.checkbox(
-            "Incluir residências multiprofissionais com vaga para nutrição",
-            key="concursos_residencias",
+def _busca_com_ia(api_key: str, estado: str, incluir_residencias: bool) -> None:
+    """Opção avançada: busca com IA (só funciona com cobrança ativada no Google)."""
+    with st.expander("🤖 Avançado: busca com IA (precisa de conta Google com cobrança ativada)"):
+        st.caption(
+            "O plano gratuito do Gemini não inclui busca na web, então com a chave gratuita "
+            "este botão não funciona — use as buscas prontas acima. Se um dia a conta Google "
+            "tiver cobrança ativada, a IA monta uma lista com a fonte de cada concurso. "
+            "Se a busca não devolver fontes, nenhuma lista é mostrada."
         )
+        if st.button("Tentar busca com IA", key="btn_concursos_ia"):
+            with st.spinner("Buscando concursos em fontes na web..."):
+                try:
+                    st.session_state.concursos_resultado = buscar_concursos(
+                        api_key, estado, incluir_residencias
+                    )
+                    st.session_state.contador_ia += 1
+                except SemFontesError as erro:
+                    st.session_state.concursos_resultado = None
+                    st.warning(str(erro))
+                except (ValueError, RuntimeError) as erro:
+                    st.session_state.concursos_resultado = None
+                    st.error(str(erro))
 
-    erro_nesta_busca = False
-    if st.button("🔎 Buscar concursos", type="primary", key="btn_concursos"):
-        with st.spinner("Buscando concursos em fontes na web..."):
-            try:
-                st.session_state.concursos_resultado = buscar_concursos(
-                    api_key, estado, incluir_residencias
-                )
-                st.session_state.contador_ia += 1
-            except SemFontesError as erro:
-                erro_nesta_busca = True
-                st.session_state.concursos_resultado = None
-                st.warning(str(erro))
-            except (ValueError, RuntimeError) as erro:
-                erro_nesta_busca = True
-                st.session_state.concursos_resultado = None
-                st.error(str(erro))
-        if erro_nesta_busca:
-            st.caption("Enquanto isso, você pode conferir direto nos portais oficiais abaixo.")
-
-    resultado = st.session_state.get("concursos_resultado")
-    if resultado:
-        with st.container(border=True):
+        resultado = st.session_state.get("concursos_resultado")
+        if resultado:
             st.caption(
                 f"Consulta feita em {resultado['data_consulta']} · Abrangência: {resultado['estado']}"
             )
@@ -259,4 +317,42 @@ def render_aba_concursos(api_key: str) -> None:
             for titulo, uri in resultado["fontes"]:
                 st.markdown(f"- [{titulo}]({uri})")
 
-    _mostrar_fontes_confiaveis(aberto=erro_nesta_busca or not resultado)
+
+def render_aba_concursos(api_key: str) -> None:
+    """Desenha a aba Concursos (chamada pelo app.py dentro da aba)."""
+    agora = _agora_brasil()
+
+    st.subheader("Concursos públicos para nutricionista")
+    st.caption(
+        "Útil para quem está começando a carreira: com um clique você abre buscas já "
+        "filtradas (nutricionista + mês + estado) e vê o que está com inscrição aberta "
+        "agora e o panorama do ano."
+    )
+    st.info(
+        "ℹ️ Esta aba é independente das outras (não usa dados de paciente) e não gasta a "
+        "cota da IA. Os links abrem buscas feitas na hora — **sempre confirme prazos e "
+        "requisitos no edital oficial** antes de se inscrever."
+    )
+
+    col_estado, col_mes, col_resid = st.columns([2, 2, 3])
+    with col_estado:
+        estado = st.selectbox("Abrangência", ESTADOS, key="concursos_estado")
+    with col_mes:
+        mes = st.selectbox("Mês", MESES, index=agora.month - 1, key="concursos_mes")
+    with col_resid:
+        incluir_residencias = st.checkbox(
+            "Incluir residências multiprofissionais com vaga para nutrição",
+            key="concursos_residencias",
+        )
+
+    with st.container(border=True):
+        st.markdown(f"**Buscas prontas — {mes} de {agora.year}**")
+        for titulo, descricao, url in montar_buscas(estado, mes, agora.year, incluir_residencias):
+            st.markdown(f"- [{titulo}]({url}) — {descricao}")
+        st.caption(
+            "Dica: ao abrir um concurso, confira no edital o período de inscrição, a taxa, "
+            "o número de vagas, o salário e os requisitos (inclusive o registro no CRN)."
+        )
+
+    _mostrar_fontes_confiaveis(aberto=False)
+    _busca_com_ia(api_key, estado, incluir_residencias)
