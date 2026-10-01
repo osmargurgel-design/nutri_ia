@@ -40,6 +40,27 @@ def _eh_erro_de_congestionamento(mensagem: str) -> bool:
     return "503" in texto or "unavailable" in texto or "overloaded" in texto
 
 
+def _eh_erro_malformado(mensagem: str) -> bool:
+    """True quando o Google devolve finish_reason=MALFORMED_FUNCTION_CALL —
+    uma falha instável e já conhecida do lado do Gemini (fica mais frequente
+    quanto maior o texto enviado na conversa), não um erro do nosso código.
+    Na prática, tentar de novo imediatamente costuma resolver."""
+    return "MALFORMED_FUNCTION_CALL" in mensagem
+
+
+def _com_nova_tentativa_se_malformado(chamada):
+    """Executa `chamada` (função sem argumentos) e, se ela falhar especifi-
+    camente por MALFORMED_FUNCTION_CALL, tenta mais uma vez antes de desistir
+    — evita expor ao profissional uma falha que, na grande maioria das vezes,
+    não se repete na tentativa seguinte."""
+    try:
+        return chamada()
+    except RuntimeError as exc:
+        if _eh_erro_malformado(str(exc)):
+            return chamada()
+        raise
+
+
 MENSAGEM_CONGESTIONADO = (
     "O modelo de IA do Google está congestionado neste momento (muita gente usando ao "
     "mesmo tempo). Isso costuma durar poucos minutos — tente enviar a pergunta de novo "
@@ -103,27 +124,54 @@ def _texto_da_resposta(response) -> str:
 
 # Quantas mensagens anteriores (perguntas + respostas somadas) são enviadas
 # junto de uma nova pergunta, quando há histórico de conversa. Limita o
-# tamanho/custo de cada chamada mesmo em conversas bem longas.
-MAX_HISTORICO_ENVIADO = 20
+# tamanho/custo de cada chamada mesmo em conversas bem longas — e também
+# reduz o risco da falha MALFORMED_FUNCTION_CALL, que o Google relata ficar
+# mais frequente quanto maior o texto enviado numa única chamada.
+MAX_HISTORICO_ENVIADO = 12
 
 
-def _montar_contents(prompt: str, historico: list | None):
-    """Monta o conteúdo enviado ao Gemini. Sem histórico (ou módulos que não
-    usam conversa contínua, como Planejador/Lista/Folheto), mantém o
-    comportamento de sempre: manda só o texto do prompt. Com histórico
-    (Consulta técnica), monta a lista de turnos anteriores (profissional e
-    IA) + a pergunta atual, para o Gemini responder como continuação real da
-    mesma conversa em vez de tratar cada pergunta como uma conversa nova."""
+def _resumo_para_historico(mensagem: str) -> str:
+    """Remove, só da cópia enviada como contexto ao Gemini (a tela continua
+    mostrando o texto completo), os rodapés que não agregam contexto clínico:
+    a lista de 'Fontes consultadas' e o aviso de busca indisponível. Isso
+    mantém o histórico enviado bem mais enxuto — o que ajuda tanto no custo
+    quanto no risco da falha MALFORMED_FUNCTION_CALL."""
+    texto = mensagem.split("\n\n---\n", 1)[0]
+    texto = re.split(r"\n\n_🔎 Resposta sem busca na web", texto, maxsplit=1)[0]
+    return texto.strip()
+
+
+def _montar_contents(prompt: str, historico: list | None) -> str:
+    """Monta o texto enviado ao Gemini — SEMPRE um único texto simples, o
+    mesmo formato que o app usa desde o início (e que funciona).
+
+    Sem histórico (primeira pergunta da conversa, ou Planejador/Lista/
+    Folheto), devolve o prompt exatamente como veio — idêntico ao original.
+    Com histórico (Consulta técnica), escreve as mensagens anteriores como um
+    bloco de contexto no topo do mesmo texto, seguido da nova mensagem.
+
+    Lição registrada (01/10/2026): uma versão anterior mandava o histórico
+    como vários turnos separados (formato de chat multi-turno do Gemini) e
+    passou a gerar erro MALFORMED_FUNCTION_CALL mesmo em conversas curtas.
+    Não voltar para aquele formato sem testar com cuidado."""
     if not historico:
         return prompt
 
-    turnos = historico[-MAX_HISTORICO_ENVIADO:]
-    contents = []
-    for autor, mensagem in turnos:
-        role = "user" if autor == "user" else "model"
-        contents.append(genai_types.Content(role=role, parts=[genai_types.Part(text=mensagem)]))
-    contents.append(genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)]))
-    return contents
+    linhas = []
+    for autor, mensagem in historico[-MAX_HISTORICO_ENVIADO:]:
+        if autor == "user":
+            linhas.append(f"Nutricionista: {mensagem.strip()}")
+        else:
+            linhas.append(f"Nutri IA: {_resumo_para_historico(mensagem)}")
+
+    return (
+        "[CONVERSA ANTERIOR NESTA SESSÃO — use apenas como contexto; não responda de novo "
+        "a estas mensagens]\n\n"
+        + "\n\n".join(linhas)
+        + "\n\n[NOVA MENSAGEM DA NUTRICIONISTA — responda a esta, como continuação da "
+        "conversa acima]\n\n"
+        + prompt
+    )
 
 
 def get_gemini_response(
@@ -210,15 +258,19 @@ def _gerar_com_busca(client, prompt: str, system_instruction: str, historico: li
     """Chama o Gemini com Grounding with Google Search ativado e anexa as
     fontes usadas ao final da resposta."""
     grounding_tool = genai_types.Tool(google_search=genai_types.GoogleSearch())
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=_montar_contents(prompt, historico),
-        config=genai_types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            tools=[grounding_tool],
-        ),
-    )
-    texto = _texto_da_resposta(response)
+
+    def _chamar():
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=_montar_contents(prompt, historico),
+            config=genai_types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                tools=[grounding_tool],
+            ),
+        )
+        return response, _texto_da_resposta(response)
+
+    response, texto = _com_nova_tentativa_se_malformado(_chamar)
 
     try:
         metadata = response.candidates[0].grounding_metadata
@@ -245,32 +297,35 @@ def _gerar_com_busca(client, prompt: str, system_instruction: str, historico: li
 
 
 def _gerar_sem_busca(client, prompt: str, system_instruction: str, historico: list | None = None) -> str:
-    try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=_montar_contents(prompt, historico),
-            config=genai_types.GenerateContentConfig(
-                system_instruction=system_instruction,
-            ),
-        )
-    except RuntimeError:
-        raise
-    except Exception as exc:  # noqa: BLE001 - queremos capturar qualquer erro da API
-        mensagem = str(exc)
-        if _eh_erro_de_congestionamento(mensagem):
-            raise RuntimeError(_com_detalhe_tecnico(MENSAGEM_CONGESTIONADO, mensagem)) from exc
-        if _eh_erro_de_limite(mensagem):
-            raise RuntimeError(
-                "Limite de uso da API do Gemini atingido. Aguarde um pouco antes de tentar "
-                "novamente ou verifique sua cota em aistudio.google.com."
-            ) from exc
-        if "API key" in mensagem or "API_KEY_INVALID" in mensagem:
-            raise RuntimeError(
-                "Chave da API inválida. Confira a chave colada na barra lateral."
-            ) from exc
-        raise RuntimeError(f"Erro ao consultar o Gemini: {mensagem}") from exc
+    def _chamar():
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=_montar_contents(prompt, historico),
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                ),
+            )
+        except RuntimeError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - queremos capturar qualquer erro da API
+            mensagem = str(exc)
+            if _eh_erro_de_congestionamento(mensagem):
+                raise RuntimeError(_com_detalhe_tecnico(MENSAGEM_CONGESTIONADO, mensagem)) from exc
+            if _eh_erro_de_limite(mensagem):
+                raise RuntimeError(
+                    "Limite de uso da API do Gemini atingido. Aguarde um pouco antes de tentar "
+                    "novamente ou verifique sua cota em aistudio.google.com."
+                ) from exc
+            if "API key" in mensagem or "API_KEY_INVALID" in mensagem:
+                raise RuntimeError(
+                    "Chave da API inválida. Confira a chave colada na barra lateral."
+                ) from exc
+            raise RuntimeError(f"Erro ao consultar o Gemini: {mensagem}") from exc
 
-    return _texto_da_resposta(response)
+        return _texto_da_resposta(response)
+
+    return _com_nova_tentativa_se_malformado(_chamar)
 
 
 # ---------------------------------------------------------------------------
