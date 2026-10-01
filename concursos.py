@@ -34,6 +34,12 @@ from utils import (
     _texto_da_resposta,
 )
 
+# Interruptor interno: a busca com IA fica DESLIGADA enquanto o app usar a IA
+# gratuita (sem busca na web). Quando passar a usar uma API que tenha busca na
+# web liberada (Gemini com cobrança ativada ou outro modelo), basta trocar para
+# True — o botão aparece e o restante do código já está pronto e testado.
+BUSCA_IA_ATIVA = False
+
 ESTADOS = [
     "Brasil todo",
     "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
@@ -280,13 +286,12 @@ def _mostrar_fontes_confiaveis(aberto: bool) -> None:
 
 
 def _busca_com_ia(api_key: str, estado: str, incluir_residencias: bool) -> None:
-    """Opção avançada: busca com IA (só funciona com cobrança ativada no Google)."""
-    with st.expander("🤖 Avançado: busca com IA (precisa de conta Google com cobrança ativada)"):
+    """Busca com IA (só aparece quando BUSCA_IA_ATIVA = True; ver o topo do arquivo)."""
+    with st.container(border=True):
+        st.markdown("**🤖 Busca com IA**")
         st.caption(
-            "O plano gratuito do Gemini não inclui busca na web, então com a chave gratuita "
-            "este botão não funciona — use as buscas prontas acima. Se um dia a conta Google "
-            "tiver cobrança ativada, a IA monta uma lista com a fonte de cada concurso. "
-            "Se a busca não devolver fontes, nenhuma lista é mostrada."
+            "A IA monta uma lista com a fonte de cada concurso. Se a busca não devolver "
+            "fontes, nenhuma lista é mostrada."
         )
         if st.button("Tentar busca com IA", key="btn_concursos_ia"):
             with st.spinner("Buscando concursos em fontes na web..."):
@@ -355,4 +360,11 @@ def render_aba_concursos(api_key: str) -> None:
         )
 
     _mostrar_fontes_confiaveis(aberto=False)
-    _busca_com_ia(api_key, estado, incluir_residencias)
+    if BUSCA_IA_ATIVA:
+        _busca_com_ia(api_key, estado, incluir_residencias)
+    else:
+        st.caption(
+            "ℹ️ O Nutri IA usa a versão gratuita da IA do Google, que não inclui busca na "
+            "web. Por isso esta aba usa buscas prontas (gratuitas e sempre atuais) em vez "
+            "de uma lista gerada pela IA."
+        )
